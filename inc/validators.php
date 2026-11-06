@@ -23,7 +23,7 @@ function validateEmail(string $email): bool
 function validateCPF(string $cpf): bool
 {
     // Remover caracteres não numéricos
-    $cpf = preg_replace('/\D/', '', $cpf ?? '');
+    $cpf = preg_replace('/\D/', '', $cpf);
 
     // Verificar se tem 11 dígitos
     if (strlen($cpf) !== 11) {
@@ -70,7 +70,7 @@ function validateCPF(string $cpf): bool
  */
 function validatePlaca(string $placa): bool
 {
-    $placa = strtoupper(trim($placa ?? ''));
+    $placa = strtoupper(trim($placa));
 
     // Remover hífens e espaços
     $placa = str_replace(['-', ' '], '', $placa);
@@ -94,7 +94,7 @@ function validatePlaca(string $placa): bool
  */
 function validateTelefone(string $telefone): bool
 {
-    $telefone = preg_replace('/\D/', '', $telefone ?? '');
+    $telefone = preg_replace('/\D/', '', $telefone);
 
     // Deve ter 10 ou 11 dígitos
     if (strlen($telefone) !== 10 && strlen($telefone) !== 11) {
@@ -115,7 +115,7 @@ function validateTelefone(string $telefone): bool
  */
 function validateNome(string $nome): bool
 {
-    $nome = trim($nome ?? '');
+    $nome = trim($nome);
 
     if (strlen($nome) < 3 || strlen($nome) > 255) {
         return false;
@@ -134,7 +134,7 @@ function validateNome(string $nome): bool
  */
 function sanitizeString(string $input): string
 {
-    $input = trim($input ?? '');
+    $input = trim($input);
     // Remove quebras de linha e caracteres de controle
     $input = preg_replace('/[\x00-\x1F\x7F]/', '', $input);
     return $input;

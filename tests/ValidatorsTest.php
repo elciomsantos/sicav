@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../inc/validators.php';
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 class ValidatorsTest extends TestCase
@@ -26,9 +27,7 @@ class ValidatorsTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider validEmailProvider
-     */
+    #[DataProvider('validEmailProvider')]
     public function testValidateEmail(string $email, bool $expected): void
     {
         $this->assertSame($expected, validateEmail($email));
@@ -53,9 +52,7 @@ class ValidatorsTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider validCpfProvider
-     */
+    #[DataProvider('validCpfProvider')]
     public function testValidateCPF(string $cpf, bool $expected): void
     {
         $this->assertSame($expected, validateCPF($cpf));
@@ -79,9 +76,7 @@ class ValidatorsTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider validPlacaProvider
-     */
+    #[DataProvider('validPlacaProvider')]
     public function testValidatePlaca(string $placa, bool $expected): void
     {
         $this->assertSame($expected, validatePlaca($placa));
@@ -106,9 +101,7 @@ class ValidatorsTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider validTelefoneProvider
-     */
+    #[DataProvider('validTelefoneProvider')]
     public function testValidateTelefone(string $telefone, bool $expected): void
     {
         $this->assertSame($expected, validateTelefone($telefone));
@@ -133,9 +126,7 @@ class ValidatorsTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider validNomeProvider
-     */
+    #[DataProvider('validNomeProvider')]
     public function testValidateNome(string $nome, bool $expected): void
     {
         $this->assertSame($expected, validateNome($nome));
@@ -158,9 +149,7 @@ class ValidatorsTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider sanitizeStringProvider
-     */
+    #[DataProvider('sanitizeStringProvider')]
     public function testSanitizeString(string $input, string $expected): void
     {
         $this->assertSame($expected, sanitizeString($input));

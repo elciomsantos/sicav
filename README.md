@@ -194,6 +194,50 @@ Acesse em `http://<IP-do-servidor>:8000`.
 O banco de dados não expõe porta no host. Acessos administrativos devem ser feitos via
 `docker compose exec db mysql -u root -p` ou pela rede interna.
 
+## Qualidade e CI
+
+Os checks rodam no GitHub Actions a cada push em `main` e em pull requests:
+
+| Workflow | O que verifica |
+|----------|----------------|
+| `tests.yml` — PHPUnit | Suíte PHP em PHP 8.2, 8.3 e 8.4, além de `composer validate`, `composer audit` e `php -l` em todos os arquivos |
+| `tests.yml` — PHPStan | Análise estática nível 5 (`phpstan.neon`) |
+| `tests.yml` — Frontend | Sintaxe dos JS, testes unitários (`node --test tests/js/*.test.mjs`) e smoke test HTML |
+| `ci.yml` — Compose | `docker compose config` de produção e do override de desenvolvimento |
+| `ci.yml` — Lint | ShellCheck em `scripts/*.sh`/`docker/*.sh` e Hadolint no `Dockerfile` |
+| `ci.yml` — Cobertura | PHPUnit com PCOV e upload do `clover.xml` como artifact |
+| `ci.yml` — Smoke | Build e subida de `db + app + nginx`, espera o banco ficar `healthy` e valida HTTP na porta 8000 |
+| `codeql.yml` | Code scanning (CodeQL) para PHP e JavaScript |
+| `dependency-review.yml` | Revisão de dependências em PRs (falha em severidade `high`) |
+| Dependabot | PRs semanais para Composer, GitHub Actions, imagem Docker e Compose |
+
+Rodando os checks principais localmente:
+
+```bash
+# Testes PHP e análise estática
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/app -w /app php:8.2-cli \
+  php vendor/bin/phpunit
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/app -w /app php:8.2-cli \
+  php vendor/bin/phpstan analyse --no-progress --memory-limit=1G
+
+# Testes JS
+node --test tests/js/*.test.mjs
+
+# Lint de infraestrutura
+docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable \
+  scripts/setup_docker.sh docker/entrypoint.sh
+docker run --rm -i -v "$PWD/.hadolint.yaml:/hadolint.yaml:ro" \
+  --entrypoint hadolint hadolint/hadolint:2.12.0 \
+  --config /hadolint.yaml - < Dockerfile
+
+# Validação do Compose
+docker compose config --quiet
+docker compose -f docker-compose.yml -f docker-compose.dev.yml config --quiet
+```
+
+> **Repositório privado:** CodeQL e Dependency Review exigem GitHub Advanced Security
+> habilitado na organização. Sem isso, apenas os demais workflows são executados.
+
 ## Usuários padrão (Docker)
 
 Os seguintes usuários são criados automaticamente na primeira execução:
@@ -221,6 +265,7 @@ O login agora redireciona diretamente para a página inicial após autenticaçã
 
 ```
 sistema-visitantes-v1.0/
+├── .github/          # Workflows (CI, CodeQL, Dependency Review) e Dependabot
 ├── api/              # Endpoints REST
 ├── config/           # Configurações do app
 ├── db/               # Scripts SQL
@@ -230,11 +275,12 @@ sistema-visitantes-v1.0/
 ├── inc/              # Helpers e includes
 ├── public/           # DocumentRoot (index.php, assets)
 ├── scripts/          # CRUD e controllers
-├── tests/            # Testes unitários
+├── tests/            # Testes unitários (PHP e JS)
 ├── vendor/           # Dependências Composer
 ├── Dockerfile        # Build da imagem PHP
 ├── docker-compose.yml
 ├── docker-compose.dev.yml  # Override de desenvolvimento (phpMyAdmin)
+├── phpstan.neon      # Configuração do PHPStan
 └── .env.example
 ```
 

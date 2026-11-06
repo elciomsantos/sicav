@@ -23,7 +23,7 @@ function logApiException(Throwable $e, array $context = []): void
     error_log('API_ERROR ' . json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 }
 
-function apiJsonResponse(array $payload, int $status = 200): void
+function apiJsonResponse(array $payload, int $status = 200): never
 {
     http_response_code($status);
     header('Content-Type: application/json; charset=UTF-8');
@@ -34,7 +34,7 @@ function apiJsonResponse(array $payload, int $status = 200): void
     exit;
 }
 
-function apiSuccess(mixed $data = null, string $message = '', int $status = 200): void
+function apiSuccess(mixed $data = null, string $message = '', int $status = 200): never
 {
     $payload = ['success' => true];
     if ($data !== null) {
@@ -46,7 +46,7 @@ function apiSuccess(mixed $data = null, string $message = '', int $status = 200)
     apiJsonResponse($payload, $status);
 }
 
-function apiError(string $error, int $status = 400): void
+function apiError(string $error, int $status = 400): never
 {
     apiJsonResponse(['success' => false, 'error' => $error], $status);
 }

@@ -4,6 +4,13 @@
          colors="true"
          cacheResult="false"
          bootstrap="tests/bootstrap.php">
+  <source>
+    <include>
+      <directory suffix=".php">src</directory>
+      <directory suffix=".php">config</directory>
+      <directory suffix=".php">inc</directory>
+    </include>
+  </source>
   <testsuites>
     <testsuite name="Validators">
       <file>tests/ValidatorsTest.php</file>

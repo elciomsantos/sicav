@@ -1,5 +1,7 @@
 <?php
 
+use PHPUnit\Framework\Attributes\PreserveGlobalState;
+use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 
 class SessionTest extends TestCase
@@ -147,8 +149,14 @@ class SessionTest extends TestCase
         $this->assertStringContainsString('expires_at < NOW()', $db->deletes[0]['sql']);
     }
 
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
     public function testFinalizeLoginSessionRegeneratesIdAndSetsUsuario(): void
     {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            session_start();
+        }
+
         $oldId = session_id();
         $db = new FakeSessionDb();
         $usuario = (object) ['id' => 7, 'nome' => 'Joao', 'nivel_acesso' => 'user', 'senha' => 'hash-nao-deve-ficar'];

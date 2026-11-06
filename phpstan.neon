@@ -1,0 +1,22 @@
+parameters:
+    level: 5
+    bootstrapFiles:
+        - phpstan-bootstrap.php
+    paths:
+        - src
+        - config
+        - inc
+        - api
+        - scripts
+        - public
+    excludePaths:
+        - vendor
+        - tests
+        - docs
+        - deploy
+        - docker
+    treatPhpDocTypesAsCertain: false
+    ignoreErrors:
+        # ENVIRONMENT e definida estaticamente no bootstrap do PHPStan; em runtime vem do ambiente
+        - identifier: identical.alwaysTrue
+          path: public/index.php

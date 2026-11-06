@@ -1,0 +1,128 @@
+name: Infra
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  compose:
+    name: Docker Compose config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate production compose
+        run: docker compose config --quiet
+
+      - name: Validate dev override
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml config --quiet
+
+  lint:
+    name: Lint (Docker/Shell)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: ShellCheck
+        run: shellcheck scripts/*.sh docker/*.sh
+
+      - name: Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          config: .hadolint.yaml
+
+  coverage:
+    name: Code coverage (PHP 8.3)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, dom, gd, pdo, sodium
+          coverage: pcov
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Run PHPUnit with coverage
+        run: |
+          mkdir -p coverage
+          vendor/bin/phpunit --coverage-text --coverage-clover coverage/clover.xml
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-clover
+          path: coverage/clover.xml
+          retention-days: 14
+
+  smoke:
+    name: Stack smoke test (compose)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Prepare data directories
+        run: |
+          mkdir -p "$RUNNER_TEMP/mysql" "$RUNNER_TEMP/fotos"
+          sudo chown -R 999:999 "$RUNNER_TEMP/mysql"
+          sudo chown -R 1000:1000 "$RUNNER_TEMP/fotos"
+
+      - name: Build and start stack
+        env:
+          DB_DATA_DIR: ${{ runner.temp }}/mysql
+          FOTOS_DIR: ${{ runner.temp }}/fotos
+        run: docker compose up -d --build
+
+      - name: Wait for database
+        run: |
+          for i in $(seq 1 60); do
+            cid=$(docker compose ps -q db)
+            health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || echo starting)
+            echo "db health: $health"
+            if [ "$health" = "healthy" ]; then
+              exit 0
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "ERRO: banco nao ficou saudavel"
+              docker compose logs db
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Wait for app through nginx
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/ || true)
+            echo "HTTP $code"
+            case "$code" in
+              200|302|303) exit 0 ;;
+            esac
+            if [ "$i" -eq 60 ]; then
+              echo "ERRO: aplicacao nao respondeu pela porta 8000"
+              docker compose logs
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --tail 200
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

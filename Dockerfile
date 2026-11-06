@@ -1,5 +1,7 @@
 FROM php:8.2-apache
 
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 LABEL maintainer="Sistema de Visitantes <dev@example.com>"
 LABEL description="Sistema de Gerenciamento de Visitantes"
 
@@ -18,7 +20,7 @@ RUN set -eux; \
 
 RUN set -eux; \
     docker-php-ext-configure gd --with-freetype --with-jpeg; \
-    docker-php-ext-install -j$(nproc) \
+    docker-php-ext-install -j"$(nproc)" \
         pdo \
         pdo_mysql \
         gd \

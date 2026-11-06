@@ -1,5 +1,6 @@
 <?php
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 class HelpersTest extends TestCase
@@ -22,9 +23,7 @@ class HelpersTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider sanitizeSpreadsheetCellProvider
-     */
+    #[DataProvider('sanitizeSpreadsheetCellProvider')]
     public function testSanitizeSpreadsheetCell(mixed $input, string $expected): void
     {
         $this->assertSame($expected, sanitizeSpreadsheetCell($input));
