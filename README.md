@@ -66,22 +66,116 @@ docker compose up -d
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 # Acesse:
-# - App: http://localhost:8080
+# - App (via nginx): http://localhost:8000
 # - phpMyAdmin (apenas via override de dev): http://localhost:8081
 ```
 
-### Produção
+### Produção (Ubuntu Server 26.04 LTS)
+
+#### 1. Instalar o Docker Engine (repositório oficial)
+
+O Docker oferece suporte oficial ao Ubuntu 26.04 LTS. Não use o pacote `docker.io`
+da distribuição (nem o snap), que podem conflitar com o repositório oficial:
 
 ```bash
+# Remove pacotes conflitantes, se existirem
+sudo apt remove $(dpkg --get-selections docker.io docker-compose docker-compose-v2 docker-doc docker-buildx podman-docker containerd runc | cut -f1) 2>/dev/null || true
+
+# Adiciona a chave GPG e o repositório oficial do Docker
+sudo apt update
+sudo apt install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+sudo tee /etc/apt/sources.list.d/docker.sources > /dev/null <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+sudo apt update
+
+# Instala Docker Engine + plugin do Compose
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo systemctl enable --now docker
+```
+
+#### 2. Montar o RAID 6 em /srv de forma persistente
+
+O drive D (RAID 6) deve ser montado em `/srv` via `/etc/fstab`, para continuar
+montado após reinicializações:
+
+```bash
+# Descubra o UUID do array (ex.: /dev/md0)
+sudo blkid /dev/md0
+
+# Crie o ponto de montagem e adicione a entrada no /etc/fstab:
+# UUID=<uuid-do-raid>  /srv  ext4  defaults,nofail  0  2
+sudo mkdir -p /srv
+sudo mount -a
+```
+
+A opção `nofail` evita que o servidor trave no boot caso o array esteja degradado.
+
+#### 3. Implantar o sistema em /opt
+
+```bash
+# Implante o projeto em /opt/sistema-visitantes
+sudo mkdir -p /opt/sistema-visitantes
+# (copie o projeto para /opt/sistema-visitantes)
+
+# Crie as pastas de dados no drive D (RAID 6, montado em /srv)
+sudo mkdir -p /srv/sistema-visitantes/mysql /srv/sistema-visitantes/fotos
+# MySQL 8.0 roda como UID 999 e o app como UID 1000:
+sudo chown 999:999 /srv/sistema-visitantes/mysql
+sudo chown 1000:1000 /srv/sistema-visitantes/fotos
+# Ubuntu usa AppArmor (não SELinux): os bind mounts funcionam sem os sufixos :z/:Z.
+
 # Configure variáveis seguras
 vim .env
 # Use senhas fortes para: VISITORPASS_DB_PASS, MYSQL_ROOT_PASSWORD
 # E gere a chave de criptografia do MFA (64 hex chars = 32 bytes):
 #   echo "VISITORPASS_MFA_KEY=$(openssl rand -hex 32)" >> .env
+#
+# Opcional - caminhos alternativos no RAID 6:
+#   DB_DATA_DIR=/srv/sistema-visitantes/mysql
+#   FOTOS_DIR=/srv/sistema-visitantes/fotos
+# Porta externa do sistema (troque se houver mais de um sistema no servidor):
+#   NGINX_PORT=8000
+# Prefixo de containers/redes (troque para cada sistema/instância):
+#   COMPOSE_PROJECT_NAME=visitantes
 
-# Build e inicie (phpMyAdmin e porta do MySQL NAO sao publicados em producao)
+# Build e inicie (nginx e a unica porta publicada; app, phpMyAdmin e MySQL nao)
+cd /opt/sistema-visitantes
 docker compose up -d --build
 ```
+
+#### 4. Acesso e firewall
+
+O nginx roda como container do serviço `nginx` e é a única porta publicada no
+host. Ele encaminha para o container `app` pela rede interna `frontend`:
+
+```bash
+# Libera a porta externa no firewall do host (padrão 8000)
+sudo ufw allow 8000/tcp
+sudo ufw enable    # se o firewall ainda não estiver ativo
+
+# Confira os containers
+docker compose ps
+```
+
+Acesse em `http://<IP-do-servidor>:8000`.
+
+> Para hospedar **outro sistema no mesmo servidor**, use outro `NGINX_PORT`
+> (ex.: 8001) e outro `COMPOSE_PROJECT_NAME` (ex.: `outro-sistema`) no `.env` do
+> outro projeto. Cada stack tem seu próprio nginx e não depende do nginx do host.
+> Não há `container_name` fixo: os containers/redes recebem o prefixo do projeto.
+> Evite portas já em uso (`sudo ss -ltnp`).
+
+> O nginx repassa `Host`, `X-Real-IP`, `X-Forwarded-For` e `X-Forwarded-Proto`
+> ao PHP. Logs de acesso/erro aparecem em `docker compose logs nginx`.
 
 ### Setup automático
 
@@ -93,7 +187,7 @@ docker compose up -d --build
 # Forca rebuild das imagens
 ./scripts/setup_docker.sh --build
 
-# Remove volumes e recria do zero (apaga o banco)
+# Remove containers e recria do zero (dados no RAID 6 em /srv SAO preservados)
 ./scripts/setup_docker.sh --reset
 ```
 
@@ -130,8 +224,9 @@ sistema-visitantes-v1.0/
 ├── api/              # Endpoints REST
 ├── config/           # Configurações do app
 ├── db/               # Scripts SQL
+├── deploy/           # Configs de infraestrutura (nginx container)
 ├── docker/           # Configurações Docker
-├── fotos_visitantes/ # Uploads de fotos (volume Docker)
+├── fotos_visitantes/ # Uploads de fotos (bind mount no RAID 6 em produção)
 ├── inc/              # Helpers e includes
 ├── public/           # DocumentRoot (index.php, assets)
 ├── scripts/          # CRUD e controllers

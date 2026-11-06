@@ -10,7 +10,7 @@
 # Uso:
 #   ./scripts/setup_docker.sh            # setup completo
 #   ./scripts/setup_docker.sh --build    # forca rebuild das imagens
-#   ./scripts/setup_docker.sh --reset    # remove volumes e recria do zero
+#   ./scripts/setup_docker.sh --reset    # remove containers (dados no RAID 6 preservados)
 #
 
 set -euo pipefail
@@ -37,7 +37,7 @@ else
 fi
 
 if [ "$RESET" = "1" ]; then
-    echo "--> Reset: removendo containers e volumes..."
+    echo "--> Reset: removendo containers e volumes nomeados (dados em /srv preservados)..."
     $COMPOSE down -v --remove-orphans
 fi
 
@@ -90,12 +90,13 @@ if ! echo "$USERS" | grep -q admin; then
     exit 1
 fi
 
-APP_PORT=$(grep -E '^APP_PORT=' .env | cut -d= -f2 || echo 8080)
+NGINX_PORT=$(grep -E '^NGINX_PORT=' .env | cut -d= -f2 || true)
+NGINX_PORT=${NGINX_PORT:-8000}
 
 echo
 echo "======================================================"
 echo " Setup concluido!"
-echo " Aplicacao: http://localhost:${APP_PORT}"
+echo " Aplicacao: http://<IP-do-servidor>:${NGINX_PORT}  (via container nginx)"
 echo " Usuarios padrao (alterar no primeiro login):"
 echo "   admin      / Admin@2026Temp!      (nivel admin)"
 echo "   supervisor / Supervisor@2026Temp! (nivel supervisor)"
