@@ -16,8 +16,8 @@ Sistema web para controle de entrada e saída de visitantes com geração de cra
 
 ## Tecnologias
 
-- PHP 8.2
-- MySQL 8.0
+- PHP 8.4
+- MySQL 8.4
 - Apache com mod_rewrite
 - JavaScript (Vanilla + Chart.js)
 - Bootstrap 5
@@ -25,8 +25,8 @@ Sistema web para controle de entrada e saída de visitantes com geração de cra
 
 ## Requisitos
 
-- PHP 8.2+
-- MySQL 8.0+
+- PHP 8.4+
+- MySQL 8.4+
 - Extensões PHP: PDO_MySQL, GD, ZIP, JSON
 - Apache com mod_rewrite
 - Criar a pasta fotos_visitantes na raiz do projeto
@@ -128,7 +128,7 @@ sudo mkdir -p /opt/sistema-visitantes
 
 # Crie as pastas de dados no drive D (RAID 6, montado em /srv)
 sudo mkdir -p /srv/sistema-visitantes/mysql /srv/sistema-visitantes/fotos
-# MySQL 8.0 roda como UID 999 e o app como UID 1000:
+# MySQL 8.4 roda como UID 999 e o app como UID 1000:
 sudo chown 999:999 /srv/sistema-visitantes/mysql
 sudo chown 1000:1000 /srv/sistema-visitantes/fotos
 # Ubuntu usa AppArmor (não SELinux): os bind mounts funcionam sem os sufixos :z/:Z.
@@ -200,7 +200,7 @@ Os checks rodam no GitHub Actions a cada push em `main` e em pull requests:
 
 | Workflow | O que verifica |
 |----------|----------------|
-| `tests.yml` — PHPUnit | Suíte PHP em PHP 8.2, 8.3 e 8.4, além de `composer validate`, `composer audit` e `php -l` em todos os arquivos |
+| `tests.yml` — PHPUnit | Suíte PHP em PHP 8.4, além de `composer validate`, `composer audit` e `php -l` em todos os arquivos |
 | `tests.yml` — PHPStan | Análise estática nível 5 (`phpstan.neon`) |
 | `tests.yml` — Frontend | Sintaxe dos JS, testes unitários (`node --test tests/js/*.test.mjs`) e smoke test HTML |
 | `ci.yml` — Compose | `docker compose config` de produção e do override de desenvolvimento |
@@ -215,9 +215,9 @@ Rodando os checks principais localmente:
 
 ```bash
 # Testes PHP e análise estática
-docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/app -w /app php:8.2-cli \
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/app -w /app php:8.4-cli \
   php vendor/bin/phpunit
-docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/app -w /app php:8.2-cli \
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/app -w /app php:8.4-cli \
   php vendor/bin/phpstan analyse --no-progress --memory-limit=1G
 
 # Testes JS
