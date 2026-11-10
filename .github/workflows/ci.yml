@@ -39,7 +39,7 @@ jobs:
           config: .hadolint.yaml
 
   coverage:
-    name: Code coverage (PHP 8.3)
+    name: Code coverage (PHP 8.4)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -47,7 +47,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: '8.4'
           extensions: mbstring, dom, gd, pdo, sodium
           coverage: pcov
           tools: composer:v2
