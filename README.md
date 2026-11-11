@@ -102,22 +102,23 @@ sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin d
 sudo systemctl enable --now docker
 ```
 
-#### 2. Montar o RAID 6 em /srv de forma persistente
+#### 2. Montar o drive dedicado em /mnt/visitantes de forma persistente
 
-O drive D (RAID 6) deve ser montado em `/srv` via `/etc/fstab`, para continuar
-montado após reinicializações:
+O banco de dados e as fotos ficam em um drive separado, montado em
+`/mnt/visitantes` via `/etc/fstab`, para continuar montado após reinicializações:
 
 ```bash
-# Descubra o UUID do array (ex.: /dev/md0)
-sudo blkid /dev/md0
+# Descubra o UUID do drive (ex.: /dev/sdb1)
+sudo blkid /dev/sdb1
 
 # Crie o ponto de montagem e adicione a entrada no /etc/fstab:
-# UUID=<uuid-do-raid>  /srv  ext4  defaults,nofail  0  2
-sudo mkdir -p /srv
+# UUID=<uuid-do-drive>  /mnt/visitantes  ext4  defaults,nofail  0  2
+sudo mkdir -p /mnt/visitantes
 sudo mount -a
 ```
 
-A opção `nofail` evita que o servidor trave no boot caso o array esteja degradado.
+A opção `nofail` evita que o servidor trave no boot caso o drive não esteja
+presente.
 
 #### 3. Implantar o sistema em /opt
 
@@ -126,11 +127,11 @@ A opção `nofail` evita que o servidor trave no boot caso o array esteja degrad
 sudo mkdir -p /opt/sistema-visitantes
 # (copie o projeto para /opt/sistema-visitantes)
 
-# Crie as pastas de dados no drive D (RAID 6, montado em /srv)
-sudo mkdir -p /srv/sistema-visitantes/mysql /srv/sistema-visitantes/fotos
+# Crie as pastas de dados no drive dedicado (montado em /mnt/visitantes)
+sudo mkdir -p /mnt/visitantes/mysql /mnt/visitantes/fotos
 # MySQL 8.4 roda como UID 999 e o app como UID 1000:
-sudo chown 999:999 /srv/sistema-visitantes/mysql
-sudo chown 1000:1000 /srv/sistema-visitantes/fotos
+sudo chown 999:999 /mnt/visitantes/mysql
+sudo chown 1000:1000 /mnt/visitantes/fotos
 # Ubuntu usa AppArmor (não SELinux): os bind mounts funcionam sem os sufixos :z/:Z.
 
 # Configure variáveis seguras
@@ -138,19 +139,22 @@ vim .env
 # Use senhas fortes para: VISITORPASS_DB_PASS, MYSQL_ROOT_PASSWORD
 # E gere a chave de criptografia do MFA (64 hex chars = 32 bytes):
 #   echo "VISITORPASS_MFA_KEY=$(openssl rand -hex 32)" >> .env
-#
-# Opcional - caminhos alternativos no RAID 6:
-#   DB_DATA_DIR=/srv/sistema-visitantes/mysql
-#   FOTOS_DIR=/srv/sistema-visitantes/fotos
+# Ative o override de producao (dados no drive dedicado em /mnt/visitantes);
+# depois basta usar `docker compose up` normalmente:
+#   echo 'COMPOSE_FILE=docker-compose.yml:docker-compose-producao.yml' >> .env
 # Porta externa do sistema (troque se houver mais de um sistema no servidor):
 #   NGINX_PORT=8000
 # Prefixo de containers/redes (troque para cada sistema/instância):
 #   COMPOSE_PROJECT_NAME=visitantes
+# (Opcional: DB_DATA_DIR/FOTOS_DIR no .env sobrescrevem os caminhos do override.)
 
-# Build e inicie (nginx e a unica porta publicada; app, phpMyAdmin e MySQL nao)
+# Build e inicie (nginx e a unica porta publicada; app e MySQL nao)
 cd /opt/sistema-visitantes
 docker compose up -d --build
 ```
+
+Os dados persistentes (banco e fotos) ficam no drive dedicado em
+`/mnt/visitantes`, definidos pelo override `docker-compose-producao.yml`.
 
 #### 4. Acesso e firewall
 
@@ -187,7 +191,7 @@ Acesse em `http://<IP-do-servidor>:8000`.
 # Forca rebuild das imagens
 ./scripts/setup_docker.sh --build
 
-# Remove containers e recria do zero (dados no RAID 6 em /srv SAO preservados)
+# Remove containers e recria do zero (dados no drive dedicado SAO preservados)
 ./scripts/setup_docker.sh --reset
 ```
 
@@ -203,10 +207,10 @@ Os checks rodam no GitHub Actions a cada push em `main` e em pull requests:
 | `tests.yml` — PHPUnit | Suíte PHP em PHP 8.4 e 8.5, além de `composer validate`, `composer audit` e `php -l` em todos os arquivos |
 | `tests.yml` — PHPStan | Análise estática nível 5 (`phpstan.neon`) |
 | `tests.yml` — Frontend | Sintaxe dos JS, testes unitários (`node --test tests/js/*.test.mjs`) e smoke test HTML |
-| `ci.yml` — Compose | `docker compose config` de produção e do override de desenvolvimento |
+| `ci.yml` — Compose | `docker compose config` de produção, do override de produção (drive dedicado) e do override de desenvolvimento |
 | `ci.yml` — Lint | ShellCheck em `scripts/*.sh`/`docker/*.sh` e Hadolint no `Dockerfile` |
 | `ci.yml` — Cobertura | PHPUnit com PCOV e upload do `clover.xml` como artifact |
-| `ci.yml` — Smoke | Build e subida de `db + app + nginx`, espera o banco ficar `healthy` e valida HTTP na porta 8000 |
+| `ci.yml` — Smoke | Build e subida de `db + app + nginx` na combinação de produção (drive dedicado), espera o banco ficar `healthy` e valida HTTP na porta 8000 |
 | `codeql.yml` | Code scanning: CodeQL para JavaScript/TypeScript e GitHub Actions; PHPStan (SARIF) e Psalm taint analysis (SARIF) para PHP — o CodeQL não oferece mais análise de PHP |
 | `dependency-review.yml` | Revisão de dependências em PRs (falha em severidade `high`) |
 | Dependabot | PRs semanais para Composer, GitHub Actions, imagem Docker e Compose |
@@ -233,6 +237,7 @@ docker run --rm -i -v "$PWD/.hadolint.yaml:/hadolint.yaml:ro" \
 # Validação do Compose
 docker compose config --quiet
 docker compose -f docker-compose.yml -f docker-compose.dev.yml config --quiet
+docker compose -f docker-compose.yml -f docker-compose-producao.yml config --quiet
 ```
 
 > **Repositório privado:** CodeQL e Dependency Review exigem GitHub Advanced Security

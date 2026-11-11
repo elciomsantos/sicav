@@ -11,6 +11,9 @@
 #   DB_DATA_DIR - pasta do banco de dados no RAID 6 (default: /srv/sistema-visitantes/mysql)
 #   FOTOS_DIR   - pasta de fotos dos visitantes no RAID 6 (default: /srv/sistema-visitantes/fotos)
 #   NGINX_PORT  - porta externa do sistema (default: 8000)
+#
+# Producao com drive dedicado em /mnt/visitantes: use junto o override
+# docker-compose-producao.yml (opcoes de uso no cabecalho dele).
 services:
   app:
     build:
