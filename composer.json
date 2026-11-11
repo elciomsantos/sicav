@@ -2,6 +2,7 @@
     "name": "sistema-visitantes/app",
     "description": "Sistema de Gerenciamento de Visitantes",
     "type": "project",
+    "license": "proprietary",
     "require": {
         "php": ">=8.4"
     },
