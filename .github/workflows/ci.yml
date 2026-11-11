@@ -18,6 +18,9 @@ jobs:
       - name: Validate dev override
         run: docker compose -f docker-compose.yml -f docker-compose.dev.yml config --quiet
 
+      - name: Validate production override (drive dedicado)
+        run: docker compose -f docker-compose.yml -f docker-compose-producao.yml config --quiet
+
   lint:
     name: Lint (Docker/Shell)
     runs-on: ubuntu-latest
@@ -71,6 +74,9 @@ jobs:
     name: Stack smoke test (compose)
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      # Exercita em CI a combinacao usada em producao (drive dedicado via override)
+      COMPOSE_FILE: docker-compose.yml:docker-compose-producao.yml
     steps:
       - uses: actions/checkout@v7
 

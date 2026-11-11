@@ -10,7 +10,7 @@
 # Uso:
 #   ./scripts/setup_docker.sh            # setup completo
 #   ./scripts/setup_docker.sh --build    # forca rebuild das imagens
-#   ./scripts/setup_docker.sh --reset    # remove containers (dados no RAID 6 preservados)
+#   ./scripts/setup_docker.sh --reset    # remove containers (dados no drive de dados preservados)
 #
 
 set -euo pipefail
@@ -38,7 +38,7 @@ else
 fi
 
 if [ "$RESET" = "1" ]; then
-    echo "--> Reset: removendo containers e volumes nomeados (dados em /srv preservados)..."
+    echo "--> Reset: removendo containers e volumes nomeados (dados no drive configurado preservados)..."
     "${COMPOSE[@]}" down -v --remove-orphans
 fi
 
