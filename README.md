@@ -200,7 +200,7 @@ Os checks rodam no GitHub Actions a cada push em `main` e em pull requests:
 
 | Workflow | O que verifica |
 |----------|----------------|
-| `tests.yml` — PHPUnit | Suíte PHP em PHP 8.4, além de `composer validate`, `composer audit` e `php -l` em todos os arquivos |
+| `tests.yml` — PHPUnit | Suíte PHP em PHP 8.4 e 8.5, além de `composer validate`, `composer audit` e `php -l` em todos os arquivos |
 | `tests.yml` — PHPStan | Análise estática nível 5 (`phpstan.neon`) |
 | `tests.yml` — Frontend | Sintaxe dos JS, testes unitários (`node --test tests/js/*.test.mjs`) e smoke test HTML |
 | `ci.yml` — Compose | `docker compose config` de produção e do override de desenvolvimento |

@@ -29,3 +29,8 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # Manter na linha LTS (8.4). A serie innovation (9.x, 26.x...) exige
+      # migracao major sem upgrade in-place; reavaliar quando sair uma nova LTS.
+      - dependency-name: "mysql"
+        update-types: ["version-update:semver-major"]
