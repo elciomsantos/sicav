@@ -6,14 +6,11 @@
 # (padrao 8000). Config em deploy/nginx/default.conf. O container "app"
 # nao publica portas no host; e acessado apenas pela rede interna.
 #
-# Dados persistentes (banco + fotos) ficam no drive D (RAID 6),
-# montado em /srv no servidor. Ajuste via .env se necessario:
-#   DB_DATA_DIR - pasta do banco de dados no RAID 6 (default: /srv/sistema-visitantes/mysql)
-#   FOTOS_DIR   - pasta de fotos dos visitantes no RAID 6 (default: /srv/sistema-visitantes/fotos)
+# Dados persistentes (banco + fotos) ficam no drive dedicado,
+# montado em /mnt/visitantes no servidor. Ajuste via .env se necessario:
+#   DB_DATA_DIR - pasta do banco de dados (default: /mnt/visitantes/mysql)
+#   FOTOS_DIR   - pasta de fotos dos visitantes (default: /mnt/visitantes/fotos)
 #   NGINX_PORT  - porta externa do sistema (default: 8000)
-#
-# Producao com drive dedicado em /mnt/visitantes: use junto o override
-# docker-compose-producao.yml (opcoes de uso no cabecalho dele).
 services:
   app:
     build:
@@ -37,9 +34,9 @@ services:
       VISITORPASS_APP_NAME: "Sistema de Visitantes"
       VISITORPASS_ENV: ${APP_ENV:-production}
     volumes:
-      # Fotos dos visitantes no drive D (RAID 6).
-      # No host: chown 1000:1000 ${FOTOS_DIR:-/srv/sistema-visitantes/fotos}
-      - ${FOTOS_DIR:-/srv/sistema-visitantes/fotos}:/var/www/html/fotos_visitantes
+      # Fotos dos visitantes no drive dedicado.
+      # No host: chown 1000:1000 ${FOTOS_DIR:-/mnt/visitantes/fotos}
+      - ${FOTOS_DIR:-/mnt/visitantes/fotos}:/var/www/html/fotos_visitantes
       - ./public/imagens:/var/www/html/public/imagens:ro
     depends_on:
       db:
@@ -104,9 +101,9 @@ services:
       MYSQL_USER: ${VISITORPASS_DB_USER:-vpuser}
       MYSQL_PASSWORD: ${VISITORPASS_DB_PASS:-visitorpassword}
     volumes:
-      # Dados do MySQL no drive D (RAID 6).
-      # No host: chown 999:999 ${DB_DATA_DIR:-/srv/sistema-visitantes/mysql}
-      - ${DB_DATA_DIR:-/srv/sistema-visitantes/mysql}:/var/lib/mysql
+      # Dados do MySQL no drive dedicado.
+      # No host: chown 999:999 ${DB_DATA_DIR:-/mnt/visitantes/mysql}
+      - ${DB_DATA_DIR:-/mnt/visitantes/mysql}:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"]
       interval: 10s
