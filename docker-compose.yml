@@ -121,8 +121,8 @@ services:
     mem_limit: 1g
     pids_limit: 512
 
-# Os dados persistentes (banco e fotos) agora usam bind mounts no RAID 6
-# (/srv), montados pelo app e db acima. Nao ha volumes nomeados do Docker.
+# Os dados persistentes (banco e fotos) usam bind mounts no drive dedicado
+# (/mnt/visitantes), montados pelo app e db acima. Nao ha volumes nomeados do Docker.
 
 networks:
   frontend:
