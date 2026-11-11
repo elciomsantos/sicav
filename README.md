@@ -207,7 +207,7 @@ Os checks rodam no GitHub Actions a cada push em `main` e em pull requests:
 | `ci.yml` — Lint | ShellCheck em `scripts/*.sh`/`docker/*.sh` e Hadolint no `Dockerfile` |
 | `ci.yml` — Cobertura | PHPUnit com PCOV e upload do `clover.xml` como artifact |
 | `ci.yml` — Smoke | Build e subida de `db + app + nginx`, espera o banco ficar `healthy` e valida HTTP na porta 8000 |
-| `codeql.yml` | Code scanning: CodeQL para JavaScript/TypeScript e GitHub Actions, e PHPStan (SARIF) para PHP — o CodeQL não oferece mais análise de PHP |
+| `codeql.yml` | Code scanning: CodeQL para JavaScript/TypeScript e GitHub Actions; PHPStan (SARIF) e Psalm taint analysis (SARIF) para PHP — o CodeQL não oferece mais análise de PHP |
 | `dependency-review.yml` | Revisão de dependências em PRs (falha em severidade `high`) |
 | Dependabot | PRs semanais para Composer, GitHub Actions, imagem Docker e Compose |
 

@@ -12,6 +12,19 @@
  *   mysql -u vpuser -p visitorpass < scripts/create_default_users.sql
  */
 
+/**
+ * Saida de erro para o terminal: este script e CLI-only (guard
+ * php_sapi_name() !== 'cli'), o texto vai para stdout e nao para um
+ * browser — nao existe sink de HTML/atributo em linha de comando.
+ *
+ * @psalm-cli-only
+ */
+function cliFail(string $message): never
+{
+    echo "\n❌ ERRO: {$message}\n\n";
+    exit(1);
+}
+
 if (php_sapi_name() !== 'cli') {
     http_response_code(403);
     die('Este script deve ser executado via linha de comando');
@@ -97,6 +110,5 @@ try {
     echo "  4. Nunca mantenha senhas padrão em produção\n\n";
 
 } catch (Exception $e) {
-    echo "\n❌ ERRO: {$e->getMessage()}\n\n";
-    exit(1);
+    cliFail($e->getMessage());
 }

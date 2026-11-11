@@ -427,11 +427,11 @@ require_once __DIR__ . '/../inc/navbar.php';
                 <div class="filtros-grid">
                     <div class="filtro-group">
                         <label for="data_inicio">Data Início</label>
-                        <input type="date" id="data_inicio" name="data_inicio" value="<?= $filtro_data_inicio ?>">
+                        <input type="date" id="data_inicio" name="data_inicio" value="<?= htmlspecialchars($filtro_data_inicio, ENT_QUOTES, 'UTF-8') ?>">
                     </div>
                     <div class="filtro-group">
                         <label for="data_fim">Data Fim</label>
-                        <input type="date" id="data_fim" name="data_fim" value="<?= $filtro_data_fim ?>">
+                        <input type="date" id="data_fim" name="data_fim" value="<?= htmlspecialchars($filtro_data_fim, ENT_QUOTES, 'UTF-8') ?>">
                     </div>
                     <div class="filtro-group">
                         <label for="usuario_id">Usuário</label>
@@ -458,7 +458,7 @@ require_once __DIR__ . '/../inc/navbar.php';
                     <div class="filtro-group">
                         <label for="visitante_id">ID Visitante</label>
                         <input type="number" id="visitante_id" name="visitante_id" placeholder="ID do visitante"
-                            value="<?= $filtro_visitante ?>">
+                            value="<?= htmlspecialchars((string) $filtro_visitante, ENT_QUOTES, 'UTF-8') ?>">
                     </div>
                 </div>
                 <button type="submit" class="btn-filtrar">Aplicar Filtros</button>
