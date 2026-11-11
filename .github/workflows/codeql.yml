@@ -1,4 +1,4 @@
-name: CodeQL
+name: Security scanning
 
 on:
   push:
@@ -20,7 +20,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: ['php', 'javascript-typescript']
+        # CodeQL nao suporta mais PHP; a analise do PHP e feita pelo job
+        # phpstan (SARIF) abaixo. JavaScript/TypeScript e GitHub Actions
+        # rodam com build-mode none.
+        language: ['javascript-typescript', 'actions']
     steps:
       - uses: actions/checkout@v7
 
@@ -35,3 +38,34 @@ jobs:
         uses: github/codeql-action/analyze@v4
         with:
           category: '/language:${{ matrix.language }}'
+
+  phpstan:
+    name: PHPStan (SARIF)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, dom, gd, pdo, sodium
+          coverage: none
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Run PHPStan
+        run: |
+          vendor/bin/phpstan analyse --no-progress --memory-limit=1G \
+            --error-format=sarif > phpstan.sarif
+
+      - name: Upload to code scanning
+        # PRs do Dependabot rodam com token somente leitura, sem
+        # permissao de security-events:write; nesses casos so pulamos o upload.
+        if: always() && github.actor != 'dependabot[bot]'
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: phpstan.sarif
+          category: '/tool:phpstan'
