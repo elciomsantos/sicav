@@ -15,11 +15,6 @@
       <code><![CDATA[$stats]]></code>
     </UnusedVariable>
   </file>
-  <file src="scripts/mfa_challenge.php">
-    <UnusedVariable>
-      <code><![CDATA[$verified]]></code>
-    </UnusedVariable>
-  </file>
   <file src="src/Database.php">
     <PossiblyUnusedMethod>
       <code><![CDATA[query]]></code>

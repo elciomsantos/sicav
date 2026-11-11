@@ -62,7 +62,7 @@ RUN set -eux; \
 RUN set -eux; \
     if [ "$ENVIRONMENT" = "production" ]; then \
         rm -f /var/www/html/.env; \
-        rm -rf /var/www/html/node_modules /var/www/html/db/*.sh; \
+        rm -rf /var/www/html/node_modules; \
         find /var/www/html -name "*.md" -delete; \
     fi
 
