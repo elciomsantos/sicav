@@ -1,6 +1,25 @@
 # Sistema de Visitantes v1.0
 
-Sistema web para controle de entrada e saída de visitantes com geração de crachás, relatórios e auditoria.
+Sistema web para controle de entrada e saída de visitantes com geração de
+crachás, relatórios e auditoria.
+
+## Sumário
+
+- [Funcionalidades](#funcionalidades)
+- [Arquitetura da stack Docker](#arquitetura-da-stack-docker)
+- [Deploy com Docker](#deploy-com-docker)
+  - [Desenvolvimento](#desenvolvimento)
+  - [Produção (Ubuntu Server 26.04 LTS)](#produção-ubuntu-server-2604-lts)
+  - [Primeiro acesso](#primeiro-acesso)
+  - [Backup e restauração](#backup-e-restauração)
+  - [Atualização da stack](#atualização-da-stack)
+  - [Solução de problemas](#solução-de-problemas)
+- [Instalação local (sem Docker)](#instalação-local-sem-docker)
+- [Variáveis de ambiente](#variáveis-de-ambiente)
+- [Qualidade e CI](#qualidade-e-ci)
+- [Histórico de segurança](#histórico-de-segurança)
+- [Estrutura do projeto](#estrutura-do-projeto)
+- [Licença](#licença)
 
 ## Funcionalidades
 
@@ -14,42 +33,30 @@ Sistema web para controle de entrada e saída de visitantes com geração de cra
 - Proteção CSRF e sanitização XSS
 - Sessões seguras com timeout configurável
 
-## Tecnologias
+## Arquitetura da stack Docker
 
-- PHP 8.4
-- MySQL 8.4
-- Apache com mod_rewrite
-- JavaScript (Vanilla + Chart.js)
-- Bootstrap 5
-- Docker Compose
-
-## Requisitos
-
-- PHP 8.4+
-- MySQL 8.4+
-- Extensões PHP: PDO_MySQL, GD, ZIP, JSON
-- Apache com mod_rewrite
-- Criar a pasta fotos_visitantes na raiz do projeto
-
-## Instalação local
-
-```bash
-# Clone o repositório
-git clone https://github.com/GhostTerminals/sistema-visitantes-v1.0.git
-cd sistema-visitantes-v1.0
-
-# Configure o ambiente
-cp .env.example .env
-# Edite .env com suas credenciais do banco
-
-# Instale dependências
-composer install --no-dev
-
-# Importe o schema do banco
-mysql -u root -p < db/visitorpass.sql
-
-# Configure o VirtualHost para apontar para /public
 ```
+navegador ──HTTP──▶ nginx ──▶ app (Apache + PHP 8.4) ──▶ db (MySQL 8.4)
+                     :8000     rede frontend (interna)   rede backend
+                     única porta                           (internal: true)
+                     publicada
+```
+
+- **nginx** (`nginx:stable-alpine`): reverse proxy e **única porta publicada**
+  no host (`NGINX_PORT`, padrão 8000). Config em `deploy/nginx/default.conf`.
+- **app** (imagem construída do `Dockerfile`): Apache + PHP 8.4, roda como
+  UID 1000 e não publica portas — acessado apenas pelo nginx na rede
+  `frontend`. Container endurecido: `cap_drop: ALL`, `read_only` com tmpfs,
+  `no-new-privileges` e limites de memória/CPU/pids.
+- **db** (`mysql:8.4`): fica apenas na rede `backend` marcada `internal: true`
+  — sem porta no host e sem saída para a internet. Acesso administrativo
+  apenas via `docker compose exec db mysql -u root -p`.
+- **Dados persistentes**: bind mounts no drive dedicado `/mnt/visitantes`
+  (`mysql/` para o banco, `fotos/` para as fotos). Não há volumes nomeados
+  do Docker — backup é dump do banco + cópia dessas pastas.
+- **Schema e migrações**: no boot do `app`, `docker/entrypoint.sh` executa
+  `docker/migrate.php` (idempotente) — cria/atualiza o schema e, na primeira
+  execução, os usuários padrão.
 
 ## Deploy com Docker
 
@@ -69,6 +76,18 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 # - App (via nginx): http://localhost:8000
 # - phpMyAdmin (apenas via override de dev): http://localhost:8081
 ```
+
+#### Setup automático (apenas desenvolvimento)
+
+```bash
+./scripts/setup_docker.sh            # cria .env, builda, sobe e valida
+./scripts/setup_docker.sh --build    # força rebuild das imagens
+./scripts/setup_docker.sh --reset    # recria containers (dados preservados)
+```
+
+O script gera o `.env` a partir de `.env.example.docker` (com
+`APP_ENV=development` e senhas fracas de exemplo) — **não use em
+produção**. No servidor, siga o runbook abaixo com segredos fortes.
 
 ### Produção (Ubuntu Server 26.04 LTS)
 
@@ -115,6 +134,7 @@ sudo blkid /dev/sdb1
 # UUID=<uuid-do-drive>  /mnt/visitantes  ext4  defaults,nofail  0  2
 sudo mkdir -p /mnt/visitantes
 sudo mount -a
+findmnt /mnt/visitantes   # confirme que está montado
 ```
 
 A opção `nofail` evita que o servidor trave no boot caso o drive não esteja
@@ -137,8 +157,6 @@ sudo chown 1000:1000 /mnt/visitantes/fotos
 # Configure variáveis seguras
 vim .env
 # Use senhas fortes para: VISITORPASS_DB_PASS, MYSQL_ROOT_PASSWORD
-# E gere a chave de criptografia do MFA (64 hex chars = 32 bytes):
-#   echo "VISITORPASS_MFA_KEY=$(openssl rand -hex 32)" >> .env
 # Porta externa do sistema (troque se houver mais de um sistema no servidor):
 #   NGINX_PORT=8000
 # Prefixo de containers/redes (troque para cada sistema/instância):
@@ -174,6 +192,12 @@ docker compose ps
 
 Acesse em `http://<IP-do-servidor>:8000`.
 
+> **HTTP sem TLS:** a stack serve HTTP puro, adequado para rede interna
+> isolada. Cookies de sessão só recebem a flag `Secure` quando o acesso é
+> via HTTPS — em HTTP ficam sem a flag. Mantenha a porta restrita à rede
+> interna (firewall) e, se precisar expor o sistema fora da rede, coloque um
+> reverse proxy com TLS à frente do nginx.
+
 > Para hospedar **outro sistema no mesmo servidor**, use outro `NGINX_PORT`
 > (ex.: 8001) e outro `COMPOSE_PROJECT_NAME` (ex.: `outro-sistema`) no `.env` do
 > outro projeto. Cada stack tem seu próprio nginx e não depende do nginx do host.
@@ -183,22 +207,168 @@ Acesse em `http://<IP-do-servidor>:8000`.
 > O nginx repassa `Host`, `X-Real-IP`, `X-Forwarded-For` e `X-Forwarded-Proto`
 > ao PHP. Logs de acesso/erro aparecem em `docker compose logs nginx`.
 
-### Setup automático
+#### 5. Verificação pós-deploy
 
 ```bash
-# Cria .env, builda as imagens, sobe containers, aguarda o banco e
-# verifica que os usuarios padrao (admin/supervisor) foram criados
-./scripts/setup_docker.sh
+# Os três containers devem estar Up (db: healthy)
+docker compose ps
 
-# Forca rebuild das imagens
-./scripts/setup_docker.sh --build
+# O app deve responder com redirect para o login (302)
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/
 
-# Remove containers e recria do zero (dados no drive dedicado SAO preservados)
-./scripts/setup_docker.sh --reset
+# Migração concluída no primeiro boot (procure no log do app)
+docker compose logs app | grep -i migration
 ```
 
-O banco de dados não expõe porta no host. Acessos administrativos devem ser feitos via
-`docker compose exec db mysql -u root -p` ou pela rede interna.
+Em caso de problema, veja [Solução de problemas](#solução-de-problemas).
+
+### Primeiro acesso
+
+Na primeira execução, `docker/migrate.php` (rodado automaticamente no boot do
+app) cria o schema e dois usuários padrão com **senha temporária** — o login
+força a troca de senha no primeiro acesso:
+
+| Usuário | Senha inicial | Nível |
+|---------|---------------|-------|
+| `admin` | `Admin@2026Temp!` | admin |
+| `supervisor` | `Supervisor@2026Temp!` | supervisor |
+
+**Altere as senhas imediatamente no primeiro login** — o sistema redireciona
+para a tela de troca de senha até que a troca seja feita.
+
+#### Alternativa: criar seu usuário e desativar os padrões
+
+Se preferir não usar credenciais padrão versionadas, crie seu usuário direto
+no banco e desative os padrões:
+
+```bash
+# Gere o hash bcrypt da sua senha
+docker compose exec app php -r 'echo password_hash("SuaSenhaForte!", PASSWORD_BCRYPT), PHP_EOL;'
+
+# Abra o MySQL (o banco não publica porta no host)
+docker compose exec db mysql -u root -p visitorpass
+```
+
+```sql
+INSERT INTO usuarios (nome, usuario, senha, nivel_acesso, ativo, senha_temporaria)
+VALUES ('Seu Nome', 'seu.usuario', '<hash-gerado>', 'admin', 1, 0);
+
+-- Desativa os usuários padrão (mantidos no banco para histórico/auditoria)
+UPDATE usuarios SET ativo = 0 WHERE usuario IN ('admin', 'supervisor');
+```
+
+### Backup e restauração
+
+O banco fica em `/mnt/visitantes/mysql` e as fotos em
+`/mnt/visitantes/fotos` (drive dedicado). Guarde os backups **fora** desse
+drive (outro disco/servidor).
+
+```bash
+# Banco: dump consistente com a stack rodando (sem downtime)
+docker compose exec db sh -c \
+  'mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" --single-transaction --routines --triggers visitorpass' \
+  > backup-visitorpass-$(date +%F).sql
+
+# Fotos: cópia do conteúdo do drive dedicado
+sudo rsync -a /mnt/visitantes/fotos/ /outro-disco/backups/fotos/
+```
+
+Exemplo de dump diário no crontab (`crontab -e`), às 2h da manhã:
+
+```cron
+0 2 * * * cd /opt/sistema-visitantes && docker compose exec db sh -c 'mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" --single-transaction --routines --triggers visitorpass' | gzip > /outro-disco/backups/visitorpass-$(date +\%F).sql.gz
+```
+
+#### Restauração
+
+Em um host novo (após os passos 1-3 do runbook, com o drive preparado e o
+`.env` configurado):
+
+```bash
+# 1. Suba a stack — o migrate cria o schema vazio
+docker compose up -d --build
+
+# 2. Restaure o dump por cima
+docker compose exec -T db sh -c \
+  'mysql -u root -p"$MYSQL_ROOT_PASSWORD" visitorpass' < backup-visitorpass.sql
+
+# 3. Restaure as fotos para o drive dedicado
+sudo rsync -a backup-fotos/ /mnt/visitantes/fotos/
+```
+
+### Atualização da stack
+
+```bash
+cd /opt/sistema-visitantes
+
+# 1. Faça backup (seção acima)
+
+# 2. Atualize o código
+sudo git pull --ff-only
+
+# 3. Rebuild e recrie os containers
+docker compose up -d --build
+
+# 4. Migrações novas (se houver) rodam automaticamente no boot do app —
+#    docker/migrate.php é idempotente e pode rodar várias vezes com segurança
+```
+
+Os dados no drive dedicado (`/mnt/visitantes`) não são tocados pelo rebuild.
+
+### Solução de problemas
+
+| Sintoma | Causa provável | Diagnóstico / correção |
+|---------|----------------|--------------------------|
+| Dados apareceram no disco do sistema em vez do drive dedicado | O drive não estava montado quando a stack subiu — o Docker criou `/mnt/visitantes` como pasta comum | `findmnt /mnt/visitantes`; `docker compose down`, mova os dados, monte o drive e suba novamente |
+| `db` nunca fica `healthy` | Permissões erradas na pasta do banco | `ls -ln /mnt/visitantes/mysql` → dono deve ser `999:999` (`sudo chown -R 999:999 /mnt/visitantes/mysql`) |
+| Upload de foto falha / erro de escrita | Permissões erradas na pasta de fotos | `ls -ln /mnt/visitantes/fotos` → dono deve ser `1000:1000` |
+| `bind: address already in use` na subida | Outro serviço usando a porta | `sudo ss -ltnp \| grep 8000`; troque `NGINX_PORT` no `.env` |
+| nginx responde `502 Bad Gateway` | Container `app` parado ou reiniciando em loop | `docker compose ps`, `docker compose logs app` |
+| Login falha para usuário válido | Banco restaurado sem dados / schema ausente | `docker compose logs app` (procure `Migration completed`); confira com `docker compose exec db mysql -u root -p visitorpass` |
+
+Logs de qualquer serviço: `docker compose logs [-f] [app\|nginx\|db]`.
+
+## Instalação local (sem Docker)
+
+Requisitos: PHP 8.4+, MySQL 8.4+, extensões PHP PDO_MySQL, GD, ZIP e JSON,
+Apache com mod_rewrite e a pasta `fotos_visitantes/` na raiz do projeto.
+
+```bash
+# Clone o repositório
+git clone https://github.com/elciomsantos/sistema-visitantes-v1.0.git
+cd sistema-visitantes-v1.0
+
+# Configure o ambiente
+cp .env.example .env
+# Edite .env com suas credenciais do banco
+
+# Instale dependências
+composer install --no-dev
+
+# Importe o schema do banco
+mysql -u root -p < db/visitorpass.sql
+
+# Configure o VirtualHost para apontar para /public
+```
+
+## Variáveis de ambiente
+
+Variáveis lidas pelo `docker-compose.yml` a partir do `.env` (não commitado):
+
+| Variável | Default | Descrição |
+|----------|---------|-----------|
+| `NGINX_PORT` | `8000` | Porta externa (única) publicada no host |
+| `APP_ENV` | `production` | `production` = `composer install --no-dev` e remove arquivos auxiliares da imagem; `development` = instala deps de dev e roda os testes durante o build |
+| `COMPOSE_PROJECT_NAME` | nome da pasta | Prefixo de containers/redes — use valores distintos para cada sistema no mesmo servidor |
+| `VISITORPASS_DB_NAME` | `visitorpass` | Nome do banco |
+| `VISITORPASS_DB_USER` | `vpuser` | Usuário da aplicação |
+| `VISITORPASS_DB_PASS` | — | **Obrigatória em produção**: senha da aplicação |
+| `MYSQL_ROOT_PASSWORD` | — | **Obrigatória em produção**: senha root do MySQL |
+| `DB_DATA_DIR` | `/mnt/visitantes/mysql` | Pasta dos dados do MySQL (drive dedicado) |
+| `FOTOS_DIR` | `/mnt/visitantes/fotos` | Pasta das fotos dos visitantes (drive dedicado) |
+| `VISITORPASS_SESSION_TIMEOUT` | `3600` | Timeout de inatividade da sessão (segundos) |
+| `VISITORPASS_SESSION_ABSOLUTE_LIFETIME` | `43200` | Vida máxima absoluta da sessão (segundos) |
+| `PMA_PORT` | `8081` | Porta do phpMyAdmin — **apenas no override de desenvolvimento** |
 
 ## Qualidade e CI
 
@@ -244,18 +414,9 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml config --quiet
 > **Repositório privado:** CodeQL e Dependency Review exigem GitHub Advanced Security
 > habilitado na organização. Sem isso, apenas os demais workflows são executados.
 
-## Usuários padrão (Docker)
+## Histórico de segurança
 
-Os seguintes usuários são criados automaticamente na primeira execução:
-
-| Usuário | Senha | Nível |
-|---------|-------|-------|
-| admin | Admin@2026Temp! | admin |
-| supervisor | Supervisor@2026Temp! | supervisor |
-
-**Altere as senhas imediatamente após o primeiro login.**
-
-## Remoção do MFA (2026-08-20)
+### Remoção do MFA (2026-08-20)
 
 A autenticação em duas etapas (MFA/TOTP) foi removida do sistema:
 
@@ -267,6 +428,11 @@ A autenticação em duas etapas (MFA/TOTP) foi removida do sistema:
 
 O login agora redireciona diretamente para a página inicial após autenticação válida. Tabelas `usuarios_mfa` e `mfa_recovery_codes` permanecem no banco mas não são mais utilizadas.
 
+### Correção de XSS refletido (2026-11, PR #9)
+
+Adicionado Psalm taint analysis (SAST) ao CI, que apontou um XSS refletido nos
+filtros do relatório de visitas; a saída passou a ser escapada no servidor.
+
 ## Estrutura do projeto
 
 ```
@@ -276,8 +442,8 @@ sistema-visitantes-v1.0/
 ├── config/           # Configurações do app
 ├── db/               # Scripts SQL
 ├── deploy/           # Configs de infraestrutura (nginx container)
-├── docker/           # Configurações Docker
-├── fotos_visitantes/ # Uploads de fotos (bind mount no RAID 6 em produção)
+├── docker/           # Entrypoint e migrações do container
+├── fotos_visitantes/ # Fotos dos visitantes (bind mount do drive dedicado em produção)
 ├── inc/              # Helpers e includes
 ├── public/           # DocumentRoot (index.php, assets)
 ├── scripts/          # CRUD e controllers
