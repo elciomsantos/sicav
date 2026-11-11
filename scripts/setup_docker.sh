@@ -5,7 +5,7 @@
 #   2. Build das imagens
 #   3. Sobe os containers (app + nginx + db)
 #   4. Espera o banco ficar saudavel
-#   5. Verifica que os usuarios padrao (admin/supervisor) foram criados
+#   5. Verifica que o usuario admin foi criado
 #
 # Uso:
 #   ./scripts/setup_docker.sh            # setup completo
@@ -94,11 +94,16 @@ fi
 NGINX_PORT=$(grep -E '^NGINX_PORT=' .env | cut -d= -f2 || true)
 NGINX_PORT=${NGINX_PORT:-8000}
 
+APP_ENV=$(grep -E '^APP_ENV=' .env | cut -d= -f2 || true)
+APP_ENV=${APP_ENV:-production}
+
 echo
 echo "======================================================"
 echo " Setup concluido!"
 echo " Aplicacao: http://<IP-do-servidor>:${NGINX_PORT}  (via container nginx)"
 echo " Usuarios padrao (alterar no primeiro login):"
 echo "   admin      / Admin@2026Temp!      (nivel admin)"
-echo "   supervisor / Supervisor@2026Temp! (nivel supervisor)"
+if [ "$APP_ENV" != "production" ]; then
+    echo "   supervisor / Supervisor@2026Temp! (nivel supervisor)"
+fi
 echo "======================================================"

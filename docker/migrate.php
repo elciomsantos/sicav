@@ -120,29 +120,6 @@ try {
         INDEX idx_rate_limits_window (window_started_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-    // Tabela usuarios_mfa (TOTP)
-    $pdo->exec("CREATE TABLE IF NOT EXISTS usuarios_mfa (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        usuario_id INT NOT NULL UNIQUE,
-        secret TEXT NOT NULL,
-        enabled TINYINT(1) NOT NULL DEFAULT 0,
-        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        CONSTRAINT fk_usuarios_mfa_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    // Tabela mfa_recovery_codes
-    $pdo->exec("CREATE TABLE IF NOT EXISTS mfa_recovery_codes (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        usuario_id INT NOT NULL,
-        code_hash CHAR(64) NOT NULL,
-        used TINYINT(1) NOT NULL DEFAULT 0,
-        used_at DATETIME NULL,
-        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT fk_mfa_recovery_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
-        UNIQUE KEY uk_mfa_recovery (usuario_id, code_hash)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
     // Tabela auditoria_visitantes
     $pdo->exec("CREATE TABLE IF NOT EXISTS auditoria_visitantes (
         id BIGINT(12) AUTO_INCREMENT PRIMARY KEY,
@@ -237,16 +214,25 @@ try {
             END IF;
         END");
 
-    // Criar usuario admin padrao se nao existir
+    // Criar usuario admin padrao se nao existir.
+    // Em producao cria somente o admin; o supervisor (e demais usuarios)
+    // deve ser criado depois pelo admin na interface administrativa.
+    $isProduction = (getenv('VISITORPASS_ENV') ?: 'production') === 'production';
     $check = $pdo->query("SELECT COUNT(*) FROM usuarios WHERE usuario = 'admin'")->fetchColumn();
     if ($check == 0) {
         $hash = password_hash('Admin@2026Temp!', PASSWORD_ARGON2ID);
         $pdo->prepare("INSERT INTO usuarios (nome, usuario, senha, nivel_acesso, senha_temporaria)
             VALUES ('Administrador Sistema', 'admin', ?, 'admin', 1)")->execute([$hash]);
-        $hash = password_hash('Supervisor@2026Temp!', PASSWORD_ARGON2ID);
-        $pdo->prepare("INSERT INTO usuarios (nome, usuario, senha, nivel_acesso, senha_temporaria)
-            VALUES ('Supervisor Sistema', 'supervisor', ?, 'supervisor', 1)")->execute([$hash]);
-        echo "Default users created (admin/supervisor). CHANGE PASSWORDS!\n";
+
+        if (!$isProduction) {
+            $hash = password_hash('Supervisor@2026Temp!', PASSWORD_ARGON2ID);
+            $pdo->prepare("INSERT INTO usuarios (nome, usuario, senha, nivel_acesso, senha_temporaria)
+                VALUES ('Supervisor Sistema', 'supervisor', ?, 'supervisor', 1)")->execute([$hash]);
+        }
+
+        echo $isProduction
+            ? "Default admin user created. CHANGE PASSWORD!\n"
+            : "Default users created (admin/supervisor). CHANGE PASSWORDS!\n";
     }
 
     echo "Migration completed successfully!\n";

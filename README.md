@@ -225,21 +225,27 @@ Em caso de problema, veja [Solução de problemas](#solução-de-problemas).
 ### Primeiro acesso
 
 Na primeira execução, `docker/migrate.php` (rodado automaticamente no boot do
-app) cria o schema e dois usuários padrão com **senha temporária** — o login
-força a troca de senha no primeiro acesso:
+app) cria o schema e o usuário padrão com **senha temporária** — o login força
+a troca de senha no primeiro acesso:
 
-| Usuário | Senha inicial | Nível |
-|---------|---------------|-------|
-| `admin` | `Admin@2026Temp!` | admin |
-| `supervisor` | `Supervisor@2026Temp!` | supervisor |
+| Ambiente | Usuário | Senha inicial | Nível |
+|----------|---------|---------------|-------|
+| Produção (`APP_ENV=production`) | `admin` | `Admin@2026Temp!` | admin |
+| Desenvolvimento (`APP_ENV=development`) | `admin` | `Admin@2026Temp!` | admin |
+| Desenvolvimento (`APP_ENV=development`) | `supervisor` | `Supervisor@2026Temp!` | supervisor |
 
-**Altere as senhas imediatamente no primeiro login** — o sistema redireciona
+Em **produção apenas o `admin` é criado**. O supervisor (e os demais usuários)
+deve ser criado depois pelo próprio admin em **Administração → Listar Usuários**.
+O `supervisor` padrão só existe em desenvolvimento, para facilitar os testes
+de níveis de acesso.
+
+**Altere a senha imediatamente no primeiro login** — o sistema redireciona
 para a tela de troca de senha até que a troca seja feita.
 
-#### Alternativa: criar seu usuário e desativar os padrões
+#### Alternativa: criar seu usuário e desativar o padrão
 
 Se preferir não usar credenciais padrão versionadas, crie seu usuário direto
-no banco e desative os padrões:
+no banco e desative o padrão:
 
 ```bash
 # Gere o hash bcrypt da sua senha
@@ -253,7 +259,8 @@ docker compose exec db mysql -u root -p visitorpass
 INSERT INTO usuarios (nome, usuario, senha, nivel_acesso, ativo, senha_temporaria)
 VALUES ('Seu Nome', 'seu.usuario', '<hash-gerado>', 'admin', 1, 0);
 
--- Desativa os usuários padrão (mantidos no banco para histórico/auditoria)
+-- Desativa o usuário padrão (mantido no banco para histórico/auditoria).
+-- Em desenvolvimento, o supervisor padrão também existe.
 UPDATE usuarios SET ativo = 0 WHERE usuario IN ('admin', 'supervisor');
 ```
 
@@ -345,8 +352,15 @@ cp .env.example .env
 # Instale dependências
 composer install --no-dev
 
-# Importe o schema do banco
-mysql -u root -p < db/visitorpass.sql
+# Crie o schema e o usuário admin padrão (o script cria o banco se não existir).
+# Ajuste as variáveis para o seu MySQL local:
+VISITORPASS_DB_HOST=127.0.0.1 \
+VISITORPASS_DB_PORT=3306 \
+VISITORPASS_DB_NAME=visitorpass \
+VISITORPASS_DB_USER=root \
+VISITORPASS_DB_PASS='sua_senha' \
+VISITORPASS_ENV=development \
+php docker/migrate.php
 
 # Configure o VirtualHost para apontar para /public
 ```
@@ -378,7 +392,7 @@ Os checks rodam no GitHub Actions a cada push em `main` e em pull requests:
 |----------|----------------|
 | `tests.yml` — PHPUnit | Suíte PHP em PHP 8.4 e 8.5, além de `composer validate`, `composer audit` e `php -l` em todos os arquivos |
 | `tests.yml` — PHPStan | Análise estática nível 5 (`phpstan.neon`) |
-| `tests.yml` — Frontend | Sintaxe dos JS, testes unitários (`node --test tests/js/*.test.mjs`) e smoke test HTML |
+| `tests.yml` — Frontend | Sintaxe dos JS e smoke test HTML |
 | `ci.yml` — Compose | `docker compose config` de produção (dados em `/mnt/visitantes`) e do override de desenvolvimento |
 | `ci.yml` — Lint | ShellCheck em `scripts/*.sh`/`docker/*.sh` e Hadolint no `Dockerfile` |
 | `ci.yml` — Cobertura | PHPUnit com PCOV e upload do `clover.xml` como artifact |
@@ -396,8 +410,8 @@ docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/app -w /app php:8.4-cli \
 docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/app -w /app php:8.4-cli \
   php vendor/bin/phpstan analyse --no-progress --memory-limit=1G
 
-# Testes JS
-node --test tests/js/*.test.mjs
+# Sintaxe dos JS
+for f in public/assets/js/*.js; do node --check "$f"; done
 
 # Lint de infraestrutura
 docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable \
@@ -423,10 +437,10 @@ A autenticação em duas etapas (MFA/TOTP) foi removida do sistema:
 - **scripts/login_submit.php** - Removida verificação `mfaIsEnabled()` após login bem-sucedido
 - **public/index.php** - Removidas rotas `mfa_challenge` e `admin_mfa`
 - **inc/navbar.php** - Removido item "Verificação em Duas Etapas" do menu do usuário
-- **.env** - Variável `VISITORPASS_MFA_KEY` não é mais necessária
-- **docker-compose.yml** - Variável mantida mas sem uso (compatibilidade)
+- **.env** - Variável `VISITORPASS_MFA_KEY` removida
+- **docker-compose.yml / docker-compose.dev.yml** - Variável removida
 
-O login agora redireciona diretamente para a página inicial após autenticação válida. Tabelas `usuarios_mfa` e `mfa_recovery_codes` permanecem no banco mas não são mais utilizadas.
+O login agora redireciona diretamente para a página inicial após autenticação válida. As tabelas `usuarios_mfa` e `mfa_recovery_codes` não são mais criadas em bancos novos; bancos antigos podem mantê-las (sem uso).
 
 ### Correção de XSS refletido (2026-11, PR #9)
 
@@ -440,14 +454,14 @@ sistema-visitantes-v1.0/
 ├── .github/          # Workflows (CI, CodeQL, Dependency Review) e Dependabot
 ├── api/              # Endpoints REST
 ├── config/           # Configurações do app
-├── db/               # Scripts SQL
 ├── deploy/           # Configs de infraestrutura (nginx container)
 ├── docker/           # Entrypoint e migrações do container
 ├── fotos_visitantes/ # Fotos dos visitantes (bind mount do drive dedicado em produção)
 ├── inc/              # Helpers e includes
 ├── public/           # DocumentRoot (index.php, assets)
 ├── scripts/          # CRUD e controllers
-├── tests/            # Testes unitários (PHP e JS)
+├── src/              # Classes (Router, Database, Middleware)
+├── tests/            # Testes PHPUnit
 ├── vendor/           # Dependências Composer
 ├── Dockerfile        # Build da imagem PHP
 ├── docker-compose.yml

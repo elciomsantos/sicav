@@ -1,14 +1,11 @@
 # Override para desenvolvimento: adiciona phpMyAdmin.
-# Uso: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# Uso: não é necessário para o funcionamento do sistema, apenas para facilitar a administração do banco de dados.
 # NAO utilizar em producao.
 services:
   app:
     build:
       args:
         ENVIRONMENT: development
-    environment:
-      # Chave de criptografia MFA de desenvolvimento (NAO usar em producao)
-      VISITORPASS_MFA_KEY: ${VISITORPASS_MFA_KEY:-3f2e6a1c9b8d4f0a5c7e9b2d4f6a8c0d1e3f5a7b9c1d3e5f7a9b1c3d5e7f9a1b}
   phpmyadmin:
     image: phpmyadmin:5.2
     ports:
