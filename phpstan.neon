@@ -20,3 +20,13 @@ parameters:
         # ENVIRONMENT e definida estaticamente no bootstrap do PHPStan; em runtime vem do ambiente
         - identifier: identical.alwaysTrue
           path: public/index.php
+
+services:
+    # Saida SARIF para integracao com o GitHub code scanning (aba Security)
+    # Uso: vendor/bin/phpstan analyse --error-format=sarif
+    errorFormatter.sarif:
+        class: PHPStanSarifErrorFormatter\SarifErrorFormatter
+        arguments:
+            relativePathHelper: @simpleRelativePathHelper
+            currentWorkingDirectory: %currentWorkingDirectory%
+            pretty: true
