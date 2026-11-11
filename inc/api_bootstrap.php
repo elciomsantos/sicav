@@ -23,14 +23,26 @@ function logApiException(Throwable $e, array $context = []): void
     error_log('API_ERROR ' . json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 }
 
+/**
+ * Fronteira de saida JSON da API: Content-Type application/json
+ * (+ X-Content-Type-Options: nosniff), o browser nunca a interpreta
+ * como HTML. JSON_HEX_TAG/JSON_HEX_AMP hex-escapam <, > e & nos valores
+ * (o Psalm remove o taint html nativamente com essas flags); as aspas
+ * que delimitam strings JSON nao sao sink de atributo HTML, entao o
+ * rastreamento de taint e desligado apenas nesta funcao de saida.
+ *
+ * @psalm-suppress TaintedInput
+ */
 function apiJsonResponse(array $payload, int $status = 200): never
 {
     http_response_code($status);
     header('Content-Type: application/json; charset=UTF-8');
+    // Impede o navegador de interpretar a resposta como HTML (anti-sniffing)
+    header('X-Content-Type-Options: nosniff');
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     header('Pragma: no-cache');
     header('Expires: Wed, 11 Jan 1984 05:00:00 GMT');
-    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP);
     exit;
 }
 

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<files psalm-version="7.2.1@127f608db981d5e1d023603514f7bbfcaae8f570">
+  <file src="inc/navbar.php">
+    <UnusedVariable>
+      <code><![CDATA[$current_page]]></code>
+    </UnusedVariable>
+  </file>
+  <file src="public/index.php">
+    <UnusedVariable>
+      <code><![CDATA[$time_left]]></code>
+    </UnusedVariable>
+  </file>
+  <file src="scripts/admin_auditoria.php">
+    <UnusedVariable>
+      <code><![CDATA[$stats]]></code>
+    </UnusedVariable>
+  </file>
+  <file src="scripts/mfa_challenge.php">
+    <UnusedVariable>
+      <code><![CDATA[$verified]]></code>
+    </UnusedVariable>
+  </file>
+  <file src="src/Database.php">
+    <PossiblyUnusedMethod>
+      <code><![CDATA[query]]></code>
+    </PossiblyUnusedMethod>
+  </file>
+  <file src="src/HttpException.php">
+    <PossiblyUnusedMethod>
+      <code><![CDATA[getContentType]]></code>
+      <code><![CDATA[getRedirectUrl]]></code>
+      <code><![CDATA[getResponseBody]]></code>
+      <code><![CDATA[getStatusCode]]></code>
+      <code><![CDATA[isRedirect]]></code>
+    </PossiblyUnusedMethod>
+  </file>
+  <file src="src/Middleware/AuthMiddleware.php">
+    <MissingOverrideAttribute>
+      <code><![CDATA[public function handle(callable $next): mixed]]></code>
+    </MissingOverrideAttribute>
+  </file>
+  <file src="src/Middleware/CsrfMiddleware.php">
+    <MissingOverrideAttribute>
+      <code><![CDATA[public function handle(callable $next): mixed]]></code>
+    </MissingOverrideAttribute>
+  </file>
+  <file src="src/Router.php">
+    <PossiblyUnusedMethod>
+      <code><![CDATA[get]]></code>
+      <code><![CDATA[post]]></code>
+    </PossiblyUnusedMethod>
+    <PossiblyUnusedReturnValue>
+      <code><![CDATA[mixed]]></code>
+    </PossiblyUnusedReturnValue>
+    <UnusedVariable>
+      <code><![CDATA[$uri]]></code>
+    </UnusedVariable>
+  </file>
+</files>

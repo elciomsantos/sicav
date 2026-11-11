@@ -24,6 +24,9 @@ Desktop.ini
 vendor/
 node_modules/
 
+# Static analysis cache
+.psalm-cache/
+
 # Uploaded files
 ! /fotos_visitantes/*
 
