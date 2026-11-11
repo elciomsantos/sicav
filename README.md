@@ -139,14 +139,12 @@ vim .env
 # Use senhas fortes para: VISITORPASS_DB_PASS, MYSQL_ROOT_PASSWORD
 # E gere a chave de criptografia do MFA (64 hex chars = 32 bytes):
 #   echo "VISITORPASS_MFA_KEY=$(openssl rand -hex 32)" >> .env
-# Ative o override de producao (dados no drive dedicado em /mnt/visitantes);
-# depois basta usar `docker compose up` normalmente:
-#   echo 'COMPOSE_FILE=docker-compose.yml:docker-compose-producao.yml' >> .env
 # Porta externa do sistema (troque se houver mais de um sistema no servidor):
 #   NGINX_PORT=8000
 # Prefixo de containers/redes (troque para cada sistema/instância):
 #   COMPOSE_PROJECT_NAME=visitantes
-# (Opcional: DB_DATA_DIR/FOTOS_DIR no .env sobrescrevem os caminhos do override.)
+# (Opcional: DB_DATA_DIR/FOTOS_DIR no .env mudam onde ficam os dados,
+#  se o drive dedicado estiver montado em outro ponto.)
 
 # Build e inicie (nginx e a unica porta publicada; app e MySQL nao)
 cd /opt/sistema-visitantes
@@ -154,7 +152,11 @@ docker compose up -d --build
 ```
 
 Os dados persistentes (banco e fotos) ficam no drive dedicado em
-`/mnt/visitantes`, definidos pelo override `docker-compose-producao.yml`.
+`/mnt/visitantes` (padrão do `docker-compose.yml`).
+
+> Se o drive não estiver montado, o Docker cria `/mnt/visitantes` como pasta
+> comum no disco do sistema e os dados caem no lugar errado — confira com
+> `findmnt /mnt/visitantes` antes de subir a stack.
 
 #### 4. Acesso e firewall
 
@@ -207,10 +209,10 @@ Os checks rodam no GitHub Actions a cada push em `main` e em pull requests:
 | `tests.yml` — PHPUnit | Suíte PHP em PHP 8.4 e 8.5, além de `composer validate`, `composer audit` e `php -l` em todos os arquivos |
 | `tests.yml` — PHPStan | Análise estática nível 5 (`phpstan.neon`) |
 | `tests.yml` — Frontend | Sintaxe dos JS, testes unitários (`node --test tests/js/*.test.mjs`) e smoke test HTML |
-| `ci.yml` — Compose | `docker compose config` de produção, do override de produção (drive dedicado) e do override de desenvolvimento |
+| `ci.yml` — Compose | `docker compose config` de produção (dados em `/mnt/visitantes`) e do override de desenvolvimento |
 | `ci.yml` — Lint | ShellCheck em `scripts/*.sh`/`docker/*.sh` e Hadolint no `Dockerfile` |
 | `ci.yml` — Cobertura | PHPUnit com PCOV e upload do `clover.xml` como artifact |
-| `ci.yml` — Smoke | Build e subida de `db + app + nginx` na combinação de produção (drive dedicado), espera o banco ficar `healthy` e valida HTTP na porta 8000 |
+| `ci.yml` — Smoke | Build e subida de `db + app + nginx` (dados em dirs temporários do runner), espera o banco ficar `healthy` e valida HTTP na porta 8000 |
 | `codeql.yml` | Code scanning: CodeQL para JavaScript/TypeScript e GitHub Actions; PHPStan (SARIF) e Psalm taint analysis (SARIF) para PHP — o CodeQL não oferece mais análise de PHP |
 | `dependency-review.yml` | Revisão de dependências em PRs (falha em severidade `high`) |
 | Dependabot | PRs semanais para Composer, GitHub Actions, imagem Docker e Compose |
@@ -237,7 +239,6 @@ docker run --rm -i -v "$PWD/.hadolint.yaml:/hadolint.yaml:ro" \
 # Validação do Compose
 docker compose config --quiet
 docker compose -f docker-compose.yml -f docker-compose.dev.yml config --quiet
-docker compose -f docker-compose.yml -f docker-compose-producao.yml config --quiet
 ```
 
 > **Repositório privado:** CodeQL e Dependency Review exigem GitHub Advanced Security
