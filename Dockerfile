@@ -1,3 +1,5 @@
+FROM composer:2 AS composer
+
 FROM php:8.5-apache
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -37,8 +39,9 @@ COPY docker/php.ini /usr/local/etc/php/conf.d/custom.ini
 
 COPY . /var/www/html/
 
+COPY --from=composer /usr/bin/composer /usr/local/bin/composer
+
 RUN set -eux; \
-    curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer && \
     if [ "$ENVIRONMENT" = "production" ]; then \
         composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader; \
     else \
