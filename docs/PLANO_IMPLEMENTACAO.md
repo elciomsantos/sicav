@@ -228,7 +228,10 @@ Os achados abaixo são as lacunas **confirmadas** entre a especificação e o es
 - **Status:** Validado. A tabela `rate_limits` e o helper `inc/rate_limit.php`
   aplicam janela deslizante por IP+rota em `get_photo`, exportações, cadastro
   de visitante e rotas administrativas POST; violações geram
-  `RATE_LIMIT_TRIGGERED` na auditoria.
+  `RATE_LIMIT_TRIGGERED` na auditoria. **Ressalva:** atrás do nginx,
+  `getClientIp()` usa apenas `REMOTE_ADDR`; sem `mod_remoteip`/validação dos
+  headers do proxy, todos os clientes podem ser contabilizados com o IP do
+  nginx.
 
 ---
 
@@ -276,7 +279,8 @@ Os achados abaixo são as lacunas **confirmadas** entre a especificação e o es
 - **Implementação recomendada:** Criar helper `logEvent(string $event, array $context)` que emite JSON para `php://stderr` (capturado pelo Docker) incluindo `request_id` (gerado por request), `user_id`, `ip`, `timestamp`. Aplicar nos eventos listados em §49. Nunca logar senha/token/MFA.
 - **Status:** Validado. `inc/log_event.php` fornece `getRequestId()` e
   `logEvent()` com saída JSON para o stderr, aplicado a login, logout, sessão,
-  autorização, rate limit e auditoria.
+  autorização, rate limit e auditoria. **Ressalva:** o `request_id` é gerado no
+  PHP; o nginx ainda não gera nem repassa `X-Request-ID`.
 
 ---
 
@@ -459,4 +463,9 @@ Para cada achado, antes de declarar concluído:
   recovery codes nem `VISITORPASS_MFA_KEY` no código atual. A exigência da §12
   permanece como decisão de política/escopo do produto.
 - TLS/HSTS (SEC-HDR-001) dependem do reverse proxy em produção (fora do repositório); HSTS é emitido pelo app quando a requisição é HTTPS.
+- IP real atrás do proxy: `getClientIp()` usa `REMOTE_ADDR` e o Apache não usa `mod_remoteip`; rate limiting por IP e IP de auditoria podem registrar o IP do nginx.
+- `request_id` não é propagado pelo nginx (`X-Request-ID`); a correlação usa apenas o ID gerado no PHP.
+- Imagens `nginx:stable-alpine` e `composer:2` usam tags de linha; fixar patch/digest é melhoria pendente.
+- `docker-compose.yml` mantém fallbacks de credenciais de desenvolvimento; em produção, senhas fortes devem ser definidas no `.env`.
+- O CI não executa scanner de imagem (Trivy/Grype/Docker Scout).
 - Análise de performance e testes E2E não executados nesta etapa (registrados como "Não auditado").
