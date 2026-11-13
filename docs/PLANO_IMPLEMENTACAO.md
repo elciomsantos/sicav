@@ -2,9 +2,14 @@
 
 ## Alinhado à ESPECIFICAÇÃO-SEGURANÇA.md e ao protocolo ESPECIFICACAO-AUDITORIA-PHP.md
 
-**Data:** 2026-08-19
-**Escopo:** Aplicação PHP + MySQL + Docker Compose (Sistema de Visitantes v1.0)
-**Baseline:** `composer audit` limpo; 114 testes PHPUnit passando (129 asserções).
+- **Data original:** 2026-08-19
+- **Última revisão:** 2026-11-13
+- **Escopo:** Aplicação PHP + MySQL + Docker Compose (SICAV — Sistema de Visitantes)
+- **Baseline atual:** `composer audit` limpo; 153 testes PHPUnit passando (240 asserções) em PHP 8.4/8.5; imagem Docker com PHP 8.5 e MySQL 8.4.
+
+> **Revisão de 2026-11-13:** o MFA/TOTP foi removido do sistema em 2026-08-20
+> e não faz parte do estado atual. O fluxo oficial de branches, PRs, deploy e
+> tags está em [`docs/FLUXO-GIT.md`](FLUXO-GIT.md).
 
 ---
 
@@ -40,7 +45,7 @@ Os achados abaixo são as lacunas **confirmadas** entre a especificação e o es
 | SEC-COOKIE-001 | Sessões | Alto | Alta | 1 | Confirmado | Validado |
 | SEC-SESS-001 | Sessões | Médio | Média | 3 | Confirmado | Validado |
 | SEC-RATE-001 | Segurança | Médio | Média | 2 | Confirmado | Validado |
-| SEC-MFA-001 | Autenticação | Alto | Alta | 5 | Confirmado | Validado |
+| SEC-MFA-001 | Autenticação | Alto | Alta | 5 | Confirmado | Removido |
 | SEC-HDR-001 | Configuração | Médio | Média | 2 | Confirmado | Validado |
 | SEC-LOG-001 | Logs | Médio | Média | 2 | Confirmado | Validado |
 | QUAL-BUG-001 | Backend | Alto | Alta | 1 | Confirmado | Validado |
@@ -55,7 +60,7 @@ Os achados abaixo são as lacunas **confirmadas** entre a especificação e o es
 
 - **Problema:** O container da aplicação executa o Apache/PHP como `root` (nenhum `USER` no Dockerfile). Violação da regra §34 (Container Non-Root) e §33 da especificação.
 - **Localização:** `Dockerfile:1-55`, `docker-compose.yml:2-28`.
-- **Evidência:** `FROM php:8.2-apache` sem diretiva `USER`; processo Apache roda como root (master).
+- **Evidência (estado original):** `FROM php:8.2-apache` sem diretiva `USER`; processo Apache rodava como root. A imagem atual usa `php:8.5-apache`.
 - **Causa raiz:** Dockerfile herdado de imagem base sem etapa de usuário dedicado.
 - **Impacto:** Comprometimento do PHP concede root no container; aumenta risco de container escape.
 - **Implementação recomendada:** Criar usuário não-root (ex.: `app`, UID 1000) no Dockerfile, definir `WORKDIR` e `USER app`, ajustar permissões dos volumes (`fotos_visitantes`). Em `docker-compose.yml`, `user: "1000:1000"`. Verificar escrita em `/var/log/php_errors.log` e `/tmp` (usar `tmpfs`).
@@ -171,10 +176,10 @@ Os achados abaixo são as lacunas **confirmadas** entre a especificação e o es
 - **Localização:** `docker/migrate.php:189,192,195`, `scripts/cadastroUsuario.php:42`, `scripts/trocar_senha.php:35`, `scripts/editarUsuario.php:79`, `scripts/create_default_users.php:73`.
 - **Evidência:** `password_hash(..., PASSWORD_BCRYPT, ['cost' => 10])` e `PASSWORD_DEFAULT`.
 - **Impacto:** Senhas novas não utilizam o algoritmo recomendado (Argon2id). Senhas existentes em bcrypt continuarão válidas via `password_verify`.
-- **Implementação recomendada:** Trocar para `password_hash($senha, PASSWORD_ARGON2ID)` em todos os pontos. Manter `password_verify` (compatível com hashes antigos). Verificar extensão `sodium` (presente no PHP 8.2+ por padrão).
+- **Implementação recomendada:** Trocar para `password_hash($senha, PASSWORD_ARGON2ID)` em todos os pontos. Manter `password_verify` (compatível com hashes antigos). Verificar a extensão `sodium` (disponível no PHP 8.4/8.5 usado pelo projeto).
 - **Testes:** Criar usuário, autenticar, alterar senha; inspecionar hash no banco (prefixo `$argon2id$`).
-- **Compatibilidade:** Exige PHP >= 7.4 com libsodium (OK no 8.2). Hashes bcrypt existentes permanecem verificáveis.
-- **Status:** Validado. `PASSWORD_ARGON2ID` aplicado em `docker/migrate.php:189,192,195`, `scripts/cadastroUsuario.php:42`, `scripts/trocar_senha.php:35`, `scripts/editarUsuario.php:79`, `scripts/create_default_users.php:73`. `php -l` OK em todos; 114 testes passando.
+- **Compatibilidade:** Requer PHP >= 8.4 com libsodium (imagem Docker atual: PHP 8.5). Hashes bcrypt existentes permanecem verificáveis.
+- **Status:** Validado. `PASSWORD_ARGON2ID` aplicado em `docker/migrate.php:189,192,195`, `scripts/cadastroUsuario.php:42`, `scripts/trocar_senha.php:35`, `scripts/editarUsuario.php:79`, `scripts/create_default_users.php:73`. `php -l` OK em todos; baseline atual com 153 testes passando.
 
 ---
 
@@ -206,7 +211,10 @@ Os achados abaixo são as lacunas **confirmadas** entre a especificação e o es
 - **Impacto:** Sessões inativas dependem de GC por inatividade; não há expiração absoluta nem trilha de revogação.
 - **Implementação recomendada:** Adicionar colunas `expires_at DATETIME`, `last_activity_at DATETIME`, `revoked_at DATETIME NULL` na migração (com `ALTER TABLE` idempotente). Registrar `expires_at = NOW() + INTERVAL SESSION_TIMEOUT SECOND`. Considerar expiração absoluta (ex.: 12h) além do timeout de inatividade. Manter o conceito de sessão única (política atual).
 - **Testes:** Criar sessão; simular expiração; validar que `isUniqueSessionValid` rejeita expirada/revogada.
-- **Status:** Aberto.
+- **Status:** Validado. A migração cria `expires_at`, `last_activity_at` e
+  `revoked_at` em `user_sessions`; `inc/single_session.php` aplica expiração por
+  inatividade, expiração absoluta (`SESSION_ABSOLUTE_LIFETIME`), revogação em
+  logout/novo login/concorrência e `purgeExpiredSessions()` no login.
 
 ---
 
@@ -217,18 +225,28 @@ Os achados abaixo são as lacunas **confirmadas** entre a especificação e o es
 - **Evidência:** `api_bootstrap.php` não aplica rate limit; `get_photo.php` e endpoints de exportação sem controle.
 - **Impacto:** Abuso de download de fotos e exportações.
 - **Implementação recomendada:** Criar helper genérico de rate limiting (tabela `rate_limits` com chave por IP+rota+janela), aplicar em `get_photo` (ex.: 60 req/min/IP), exportações e endpoints admin. Registrar evento `RATE_LIMIT_TRIGGERED`.
-- **Status:** Aberto.
+- **Status:** Validado. A tabela `rate_limits` e o helper `inc/rate_limit.php`
+  aplicam janela deslizante por IP+rota em `get_photo`, exportações, cadastro
+  de visitante e rotas administrativas POST; violações geram
+  `RATE_LIMIT_TRIGGERED` na auditoria.
 
 ---
 
-### SEC-MFA-001 — MFA ausente
+### SEC-MFA-001 — MFA (histórico, removido)
 
-- **Problema:** Nenhum mecanismo de MFA. Violação §12 (obrigatório para contas administrativas e operações críticas).
-- **Localização:** Fluxo de login (`scripts/login_submit.php`).
-- **Evidência:** Não há colunas de MFA, challenge, TOTP ou recovery codes no schema.
-- **Impacto:** Contas admin protegidas apenas por senha.
-- **Implementação recomendada (esforço alto):** Adicionar suporte TOTP (extensão/tabela `usuarios_mfa` com `secret` criptografado ou hash), tela de desafio pós-senha para admins, recovery codes de uso único auditáveis. Aplicar acessível a admin; opcional a supervisores. Registrar eventos `MFA_ENABLED`, `MFA_DISABLED`, `MFA_FAILED`.
-- **Status:** Aberto (recomenda-se planejar como fase 2).
+- **Problema original:** nenhum mecanismo de MFA; contas administrativas
+  protegidas apenas por senha (violação da §12 da especificação).
+- **Histórico:** o TOTP chegou a ser implementado em 2026-08, com tabelas
+  `usuarios_mfa`/`mfa_recovery_codes`, tela de desafio e `VISITORPASS_MFA_KEY`.
+- **Estado atual (2026-11-13):** o MFA foi **removido do sistema em
+  2026-08-20**. Não existem mais `inc/totp.php`, `inc/mfa.php`, rotas de
+  desafio/setup, tabelas novas de MFA nem a variável `VISITORPASS_MFA_KEY`.
+  O login segue direto para a home após a autenticação.
+- **Evidência:** `scripts/login_submit.php`, `public/index.php`,
+  `docker/migrate.php`, `docker-compose.yml` e `.env.example`.
+- **Status:** Removido. A exigência normativa da §12 permanece como decisão de
+  produto pendente; os controles atuais incluem Argon2id, bloqueio por
+  tentativas, rate limiting, sessão única e auditoria.
 
 ---
 
@@ -243,7 +261,10 @@ Os achados abaixo são as lacunas **confirmadas** entre a especificação e o es
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   ```
   Configurar redirecionamento HTTP→HTTPS no proxy. No Apache dev, manter porta 80.
-- **Status:** Aberto.
+- **Status:** Validado no app. O `Strict-Transport-Security` é emitido por
+  `public/index.php` quando `isHttpsRequest()` detecta HTTPS; a terminação TLS
+  e o redirecionamento HTTP→HTTPS continuam sob responsabilidade do proxy
+  reverso externo.
 
 ---
 
@@ -253,7 +274,9 @@ Os achados abaixo são as lacunas **confirmadas** entre a especificação e o es
 - **Localização:** `inc/api_bootstrap.php` (apenas `API_ERROR`), `scripts/login_submit.php`.
 - **Evidência:** Apenas `error_log('API_ERROR ...')` e logs de erro de banco. Auditoria em banco existe apenas para `visitorinfo` (triggers).
 - **Implementação recomendada:** Criar helper `logEvent(string $event, array $context)` que emite JSON para `php://stderr` (capturado pelo Docker) incluindo `request_id` (gerado por request), `user_id`, `ip`, `timestamp`. Aplicar nos eventos listados em §49. Nunca logar senha/token/MFA.
-- **Status:** Aberto.
+- **Status:** Validado. `inc/log_event.php` fornece `getRequestId()` e
+  `logEvent()` com saída JSON para o stderr, aplicado a login, logout, sessão,
+  autorização, rate limit e auditoria.
 
 ---
 
@@ -266,7 +289,7 @@ Os achados abaixo são as lacunas **confirmadas** entre a especificação e o es
 - **Impacto:** O visitante é gravado (INSERT executado), porém a resposta retorna `id: null`, podendo quebrar fluxos do frontend que dependem do ID e induzir cadastros duplicados.
 - **Implementação recomendada:** Usar `$db->insert($sql, $params)` e manter a checagem `$result['status'] !== 'success'`.
 - **Testes:** Cadastrar visitante via API; validar que a resposta contém `id` numérico e o registro no banco. Adicionar teste de integração.
-- **Status:** Validado. `api/api_cadastro_visitante.php:153` agora usa `$db->insert($sql, $params)`, mantendo a checagem `$result['status'] !== 'success'` e retornando `id` numérico. `php -l` OK; 114 testes passando.
+- **Status:** Validado. `api/api_cadastro_visitante.php:153` agora usa `$db->insert($sql, $params)`, mantendo a checagem `$result['status'] !== 'success'` e retornando `id` numérico. `php -l` OK; baseline atual com 153 testes passando.
 
 ---
 
@@ -291,7 +314,7 @@ Os achados abaixo são as lacunas **confirmadas** entre a especificação e o es
 2. ~~SEC-RATE-001: rate limiting genérico.~~ Validado.
 3. ~~SEC-HDR-001: HSTS + TLS no proxy (produção).~~ Validado (HSTS no app; TLS depende do proxy).
 4. ~~SEC-LOG-001: eventos estruturados + request_id.~~ Validado.
-5. ~~SEC-MFA-001: TOTP implementado (esforço alto).~~ Validado — obrigatoriedade para admins fica em aberto (decisão de política, ver §6).
+5. ~~SEC-MFA-001: TOTP implementado (esforço alto).~~ **Removido em 2026-08-20** — não faz parte do sistema atual; ver §6.
 
 ### Fase 3 — Validação e Testes de Segurança
 - Executar testes obrigatórios da especificação (§62): autenticação (brute force, session fixation), autorização (IDOR/BOLA), web (SQLi, XSS, CSRF, path traversal), arquivos (upload inválido, executável, download sem autorização), container (usuário, capabilities, ports).
@@ -342,18 +365,20 @@ Data de execução: 2026-08-19.
 
 | ID | Correção | Validação |
 |---|---|---|
-| SEC-LOG-001 | `inc/log_event.php` (`getRequestId()` + `logEvent()` JSON → stderr, evento `AUDIT`); aplicado em login (LOGIN_FAILURE/LOGIN_SUCCESS), logout (LOGOUT), API (AUTHORIZATION_DENIED), sessão (SESSION_CREATED/EXPIRED/REVOKED), MFA e rate limit | Eventos AUDIT observados nos logs do container |
+| SEC-LOG-001 | `inc/log_event.php` (`getRequestId()` + `logEvent()` JSON → stderr, evento `AUDIT`); aplicado em login (LOGIN_FAILURE/LOGIN_SUCCESS), logout (LOGOUT), API (AUTHORIZATION_DENIED), sessão (SESSION_CREATED/EXPIRED/REVOKED) e rate limit | Eventos AUDIT observados nos logs do container |
 | SEC-SESS-001 | `SESSION_ABSOLUTE_LIFETIME`; migração: `expires_at`, `last_activity_at`, `revoked_at` em `user_sessions`; expiração por tempo absoluto, revogação em logout/novo login/concorrência; `purgeExpiredSessions` no login | Logout → `active=0` + `revoked_at` preenchido; timeout → SESSION_EXPIRED |
 | SEC-RATE-001 | Tabela `rate_limits` + `inc/rate_limit.php` (janela deslizante por IP+rota); get_photo 60/min, api_export 10/min, exportar_auditoria 10/min, api_cadastro_visitante 30/min, rotas admin POST 30/min | get_photo: 60×200 + 429; api_export: 10×200 + 429; admin POST: 429 após limite; RATE_LIMIT_TRIGGERED auditado |
 | SEC-HDR-001 | `Strict-Transport-Security` enviado quando `isHttpsRequest()` (produção atrás de proxy TLS); nota no `apache.conf` | Header presente com `X-Forwarded-Proto: https`; ausente em HTTP (dev) |
-| SEC-MFA-001 | `inc/totp.php` (RFC 6238, validado com vetores do padrão) + `inc/mfa.php` (secret criptografado com `VISITORPASS_MFA_KEY` via sodium, 10 recovery codes); tabelas `usuarios_mfa`/`mfa_recovery_codes`; gate no login (`scripts/mfa_challenge.php`); setup admin (`scripts/admin_mfa.php`); `finalizeLoginSession()` extraído | Fluxo completo: setup → secret+10 codes → confirm TOTP → login exige challenge → TOTP/recovery code válidos → home; código inválido → erro; recovery code consumido (`used=1`) |
+| SEC-MFA-001 | Implementação TOTP (2026-08) e remoção posterior em 2026-08-20 | Removido do código, schema novo, rotas e compose; login direto para a home |
 
 Correções adicionais descobertas na Fase 2 (bug pré-existente):
 
 - **Redirects admin quebrados (`headers already sent`):** com `output_buffering=0`, as rotas incluem `inc/header.php` antes do script, então todo `header('Location:')` em scripts admin/user falhava (ex.: `desbloquear_login` → 500; `trocar_senha` emitia warning). Corrigido com `ob_start()` no topo de `public/index.php`. Validação: `desbloquear_login` → 302 OK; trocar_senha → 302 OK.
 - **`revoked_at = '0000-00-00'`:** comparação contra valor zero-date no `isUniqueSessionValid` quebrava sob `NO_ZERO_DATE` (MySQL 8 default sql_mode) → 500 em `trocar_senha`. Removida a comparação legada (revogado agora usa NULL). Validação: login E2E OK sem erros de banco.
 
-Configuração exigida: `VISITORPASS_MFA_KEY` (64 hex chars = 32 bytes) para criptografar secrets TOTP — adicionado ao `docker-compose.yml` (via env), `.env.example` e default de dev em `docker-compose.dev.yml` (somente desenvolvimento). MFA falha de forma segura (setup recusa) se a chave estiver ausente.
+Configuração exigida (histórico): `VISITORPASS_MFA_KEY` (64 hex chars = 32
+bytes) era usada para criptografar secrets TOTP. A variável e os arquivos de
+MFA foram removidos em 2026-08-20 e não existem no estado atual.
 
 Validação da suíte: `vendor/bin/phpunit` → 114 testes, 129 asserções OK.
 
@@ -365,10 +390,10 @@ Data de execução: 2026-08-19.
 |---|---|---|
 | SEC-AUTH-001 | Brute force: 5 falhas bloqueiam por 15 min (`login_attempts`, `MAX_LOGIN_ATTEMPTS=5`, `MAX_IP_LOGIN_ATTEMPTS=15` por IP) | **Bug corrigido — ver abaixo.** Após fix, 5 falhas → `user:5:<lock_until>`; 6ª tentativa com senha correta → bloqueada (redirect `index.php?page=login` + mensagem "Acesso temporariamente bloqueado"); LOGIN_FAILURE/account_locked auditados. |
 | SEC-AUTH-002 | Session fixation: `session_regenerate_id(true)` em `finalizeLoginSession()` | **Validado** — session_id trocado após login (ex.: `fb0d…` → `630309…`); sessão antiga destruída no servidor (`session_regenerate_id(true)`); cookie atualizado. |
-| SEC-AUTHZ-001 | IDOR/BOLA em rotas API e admin | **Bug corrigido — ver abaixo (SEC-AUTHZ-001).** Após fix: user→`api_estatisticas`/`exportar_auditoria` 403; supervisor→`get_auditoria` 403, `api_estatisticas` 200; admin (pós-MFA)→rotas admin 200; eventos `AUTHORIZATION_DENIED` auditados. IDOR em `api_detalhes`/`reactivate_visitor`/`get_photo`: by-design (dados de visitante são compartilhados, sem modelo de ownership; `vid` é `(int)`). |
+| SEC-AUTHZ-001 | IDOR/BOLA em rotas API e admin | **Bug corrigido — ver abaixo (SEC-AUTHZ-001).** Após fix: user→`api_estatisticas`/`exportar_auditoria` 403; supervisor→`get_auditoria` 403, `api_estatisticas` 200; admin (autenticado)→rotas admin 200; eventos `AUTHORIZATION_DENIED` auditados. IDOR em `api_detalhes`/`reactivate_visitor`/`get_photo`: by-design (dados de visitante são compartilhados, sem modelo de ownership; `vid` é `(int)`). |
 | SEC-WEB-001 | SQLi / XSS / CSRF / path traversal | **Validado** — SQLi: todos os acessos via prepared statements (`:param`), probes (`' OR 1=1--`, `UNION`, `DROP TABLE`) sem bypass e sem erro DB; XSS: entradas exibidas com `htmlspecialchars(ENT_QUOTES)` (ex.: `scripts/login.php:141`), payload `<script>alert(1)</script>` não refletido; CSRF: token obrigatório em POST (`validateCsrfToken`), sem token → rejeitado (HTTP 419/403 — ver bug SEC-WEB-001 abaixo); path traversal: `get_photo` usa `(int)$vid` e `isValidImage()` (`getimagesize`), `foto_caminho` gerado no servidor. |
 | SEC-FILE-001 | Upload inválido/executável; download sem autorização | **Validado** — upload exige `data:image/...;base64`, valida `getimagesizefromstring`, MIME×extensão conferem (jpg≠gif rejeitado), nome de arquivo gerado no servidor (`visitante_<uniqid>_<time>.<ext>`), tamanho ≤ 5 MB; shell PHP disfarçado de JPEG rejeitado ("Conteudo de imagem invalido"); poliglota JPEG+PHP aceito mas **inerte** (extensão `.jpeg` — handler PHP só casa `\.php$` —, fora do docroot, servido via `readfile()` com `Content-Type: image/jpeg`); acesso direto bloqueado (403). |
-| SEC-DOCKER-008 | Container: usuário, capabilities, ports | **Validado (revalidação)** — Apache/PHP rodam como `app` (uid 1000); filesystem `read_only` (escrita falha fora de `fotos_visitantes`); `cap_drop: ALL` + `NET_BIND_SERVICE`; `no-new-privileges`; `mem_limit/cpus/pids_limit`; `db` sem porta publicada (só rede interna); porta pública: 8080 (app). |
+| SEC-DOCKER-008 | Container: usuário, capabilities, ports | **Validado (revalidação)** — Apache/PHP rodam como `app` (uid 1000); filesystem `read_only` (escrita falha fora de `fotos_visitantes`); `cap_drop: ALL` + `NET_BIND_SERVICE`; `no-new-privileges`; `mem_limit/cpus/pids_limit`; `db` sem porta publicada (só rede interna); porta pública: 8000 (nginx), app sem porta publicada. |
 
 **Bug de segurança encontrado (SEC-AUTH-001): timezone incoerente entre PHP e MySQL.**
 
@@ -421,7 +446,7 @@ Para cada achado, antes de declarar concluído:
 - [ ] Correção implementada.
 - [ ] Testes executados (suite existente continua passando: `vendor/bin/phpunit`).
 - [ ] Segurança reavaliada.
-- [ ] Compatibilidade validada (Docker, MySQL, PHP 8.2).
+- [ ] Compatibilidade validada (Docker, MySQL 8.4, PHP 8.4/8.5).
 - [ ] Documentação atualizada (este plano e README quando aplicável).
 - [ ] Finding atualizado para "Validado".
 
@@ -430,6 +455,8 @@ Para cada achado, antes de declarar concluído:
 ## 6. Limitações
 
 - Ambiente de produção não acessível; validação limitada ao Docker local.
-- MFA (SEC-MFA-001): implementado com TOTP para todos os usuários autenticados (menu do usuário); **exigir MFA obrigatório para admins fica em aberto — decisão de política a ser tomada pela equipe/stakeholders (impacto: exigência da §12 depende dessa decisão).**
+- MFA (SEC-MFA-001): **removido do sistema em 2026-08-20**; não há TOTP,
+  recovery codes nem `VISITORPASS_MFA_KEY` no código atual. A exigência da §12
+  permanece como decisão de política/escopo do produto.
 - TLS/HSTS (SEC-HDR-001) dependem do reverse proxy em produção (fora do repositório); HSTS é emitido pelo app quando a requisição é HTTPS.
 - Análise de performance e testes E2E não executados nesta etapa (registrados como "Não auditado").

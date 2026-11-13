@@ -1,4 +1,4 @@
-# Sistema de Visitantes v1.0
+# Sistema de Visitantes (SICAV)
 
 Sistema web para controle de entrada e saída de visitantes com geração de
 crachás, relatórios e auditoria.
@@ -27,17 +27,18 @@ crachás, relatórios e auditoria.
 - Cadastro de visitantes com foto via webcam
 - Geração de crachá personalizado (impressão)
 - Controle de entrada/saída com registro de data/hora
-- Relatórios por período com gráficos
-- Auditoria de todas as alterações
-- Níveis de acesso: admin, supervisor, user
-- Bloqueio automático após tentativas de login inválidas
-- Proteção CSRF e sanitização XSS
-- Sessões seguras com timeout configurável
+- Relatórios por período com filtros e exportação em Excel, CSV e PDF
+- Auditoria de cadastros, edições e exclusões de visitantes, com exportação em CSV e JSON
+- Níveis de acesso: admin, supervisor e user
+- Sessão única por usuário, com timeout por inatividade e expiração absoluta
+- Bloqueio automático após tentativas de login inválidas e rate limiting por rota
+- Proteção CSRF, sanitização XSS, CSP com nonce e HSTS em HTTPS
+- Administração de usuários, auditoria e desbloqueio de logins
 
 ## Arquitetura da stack Docker
 
 ```
-navegador ──HTTP──▶ nginx ──▶ app (Apache + PHP 8.4) ──▶ db (MySQL 8.4)
+navegador ──HTTP──▶ nginx ──▶ app (Apache + PHP 8.5) ──▶ db (MySQL 8.4)
                      :8000     rede frontend (interna)   rede backend
                      única porta                           (internal: true)
                      publicada
@@ -45,7 +46,7 @@ navegador ──HTTP──▶ nginx ──▶ app (Apache + PHP 8.4) ──▶ d
 
 - **nginx** (`nginx:stable-alpine`): reverse proxy e **única porta publicada**
   no host (`NGINX_PORT`, padrão 8000). Config em `deploy/nginx/default.conf`.
-- **app** (imagem construída do `Dockerfile`): Apache + PHP 8.4, roda como
+- **app** (imagem construída do `Dockerfile`): Apache + PHP 8.5, roda como
   UID 1000 e não publica portas — acessado apenas pelo nginx na rede
   `frontend`. Container endurecido: `cap_drop: ALL`, `read_only` com tmpfs,
   `no-new-privileges` e limites de memória/CPU/pids.
@@ -249,8 +250,8 @@ Se preferir não usar credenciais padrão versionadas, crie seu usuário direto
 no banco e desative o padrão:
 
 ```bash
-# Gere o hash bcrypt da sua senha
-docker compose exec app php -r 'echo password_hash("SuaSenhaForte!", PASSWORD_BCRYPT), PHP_EOL;'
+# Gere o hash Argon2id da sua senha
+docker compose exec app php -r 'echo password_hash("SuaSenhaForte!", PASSWORD_ARGON2ID), PHP_EOL;'
 
 # Abra o MySQL (o banco não publica porta no host)
 docker compose exec db mysql -u root -p visitorpass
@@ -311,8 +312,9 @@ cd /opt/sistema-visitantes
 
 # 1. Faça backup (seção acima)
 
-# 2. Atualize o código
-sudo git pull --ff-only
+# 2. Atualize o código na branch main
+git switch main
+git pull --ff-only origin main
 
 # 3. Rebuild e recrie os containers
 docker compose up -d --build
@@ -368,13 +370,14 @@ Detalhes e comandos de PR estão em [docs/FLUXO-GIT.md](docs/FLUXO-GIT.md).
 
 ## Instalação local (sem Docker)
 
-Requisitos: PHP 8.4+, MySQL 8.4+, extensões PHP PDO_MySQL, GD, ZIP e JSON,
-Apache com mod_rewrite e a pasta `fotos_visitantes/` na raiz do projeto.
+Requisitos: PHP 8.4+ (a imagem Docker usa PHP 8.5), MySQL 8.4+, extensões PHP
+PDO_MySQL, GD, ZIP e JSON, Apache com mod_rewrite e a pasta
+`fotos_visitantes/` na raiz do projeto.
 
 ```bash
 # Clone o repositório
-git clone https://github.com/elciomsantos/sistema-visitantes-v1.0.git
-cd sistema-visitantes-v1.0
+git clone https://github.com/elciomsantos/sicav.git
+cd sicav
 
 # Configure o ambiente
 cp .env.example .env
@@ -403,7 +406,7 @@ Variáveis lidas pelo `docker-compose.yml` a partir do `.env` (não commitado):
 | Variável | Default | Descrição |
 |----------|---------|-----------|
 | `NGINX_PORT` | `8000` | Porta externa (única) publicada no host |
-| `APP_ENV` | `production` | `production` = `composer install --no-dev` e remove arquivos auxiliares da imagem; `development` = instala deps de dev e roda os testes durante o build |
+| `APP_ENV` | `production` | `production` = instala apenas dependências de produção e remove `.env`, `node_modules` e arquivos `.md` da imagem; `development` = instala dependências de dev e executa PHPUnit + checagem de sintaxe JS durante o build |
 | `COMPOSE_PROJECT_NAME` | nome da pasta | Prefixo de containers/redes — use valores distintos para cada sistema no mesmo servidor |
 | `VISITORPASS_DB_NAME` | `visitorpass` | Nome do banco |
 | `VISITORPASS_DB_USER` | `vpuser` | Usuário da aplicação |
@@ -417,28 +420,30 @@ Variáveis lidas pelo `docker-compose.yml` a partir do `.env` (não commitado):
 
 ## Qualidade e CI
 
-Os checks rodam no GitHub Actions a cada push em `main` e em pull requests:
+Os checks rodam no GitHub Actions a cada push em `main` e em
+`fix/dev-development`, além de todos os pull requests:
 
 | Workflow | O que verifica |
 |----------|----------------|
 | `tests.yml` — PHPUnit | Suíte PHP em PHP 8.4 e 8.5, além de `composer validate`, `composer audit` e `php -l` em todos os arquivos |
 | `tests.yml` — PHPStan | Análise estática nível 5 (`phpstan.neon`) |
-| `tests.yml` — Frontend | Sintaxe dos JS e smoke test HTML |
+| `tests.yml` — Frontend | Sintaxe dos JS (Node 22) e smoke test HTML |
 | `ci.yml` — Compose | `docker compose config` de produção (dados em `/mnt/visitantes`) e do override de desenvolvimento |
 | `ci.yml` — Lint | ShellCheck em `scripts/*.sh`/`docker/*.sh` e Hadolint no `Dockerfile` |
 | `ci.yml` — Cobertura | PHPUnit com PCOV e upload do `clover.xml` como artifact |
 | `ci.yml` — Smoke | Build e subida de `db + app + nginx` (dados em dirs temporários do runner), espera o banco ficar `healthy` e valida HTTP na porta 8000 |
 | `codeql.yml` | Code scanning: CodeQL para JavaScript/TypeScript e GitHub Actions; PHPStan (SARIF) e Psalm taint analysis (SARIF) para PHP — o CodeQL não oferece mais análise de PHP |
+| `release.yml` | Cria a release no GitHub para cada tag `v*.*.*` |
 | `dependency-review.yml` | Revisão de dependências em PRs (falha em severidade `high`) |
-| Dependabot | PRs semanais para Composer, GitHub Actions, imagem Docker e Compose |
+| Dependabot | PRs semanais para Composer, GitHub Actions, imagem Docker e Compose (majors do MySQL são ignorados para manter a linha LTS 8.4) |
 
-Rodando os checks principais localmente:
+Rodando os checks principais localmente (requer Docker e `composer install`):
 
 ```bash
 # Testes PHP e análise estática
-docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/app -w /app php:8.4-cli \
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/app -w /app php:8.5-cli \
   php vendor/bin/phpunit
-docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/app -w /app php:8.4-cli \
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/app -w /app php:8.5-cli \
   php vendor/bin/phpstan analyse --no-progress --memory-limit=1G
 
 # Sintaxe dos JS
@@ -446,7 +451,7 @@ for f in public/assets/js/*.js; do node --check "$f"; done
 
 # Lint de infraestrutura
 docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable \
-  scripts/setup_docker.sh docker/entrypoint.sh
+  scripts/*.sh docker/*.sh
 docker run --rm -i -v "$PWD/.hadolint.yaml:/hadolint.yaml:ro" \
   --entrypoint hadolint hadolint/hadolint:2.12.0 \
   --config /hadolint.yaml - < Dockerfile
@@ -456,8 +461,8 @@ docker compose config --quiet
 docker compose -f docker-compose.yml -f docker-compose.dev.yml config --quiet
 ```
 
-> **Repositório privado:** CodeQL e Dependency Review exigem GitHub Advanced Security
-> habilitado na organização. Sem isso, apenas os demais workflows são executados.
+> O repositório é público. Code scanning (CodeQL/PHPStan/Psalm) e Dependency
+> Review executam sem necessidade de GitHub Advanced Security.
 
 ## Histórico de segurança
 
@@ -481,24 +486,29 @@ filtros do relatório de visitas; a saída passou a ser escapada no servidor.
 ## Estrutura do projeto
 
 ```
-sistema-visitantes-v1.0/
-├── .github/          # Workflows (CI, CodeQL, Dependency Review) e Dependabot
+sicav/
+├── .github/          # Workflows (CI, testes, CodeQL, release, dependency review) e Dependabot
 ├── api/              # Endpoints REST
-├── config/           # Configurações do app
+├── config/           # Configurações do app, banco e permissões
 ├── deploy/           # Configs de infraestrutura (nginx container)
-├── docker/           # Entrypoint e migrações do container
+├── docker/           # Entrypoint, Apache/PHP ini e migrações do container
+├── docs/             # Especificações, plano de implementação e fluxo Git
 ├── fotos_visitantes/ # Fotos dos visitantes (bind mount do drive dedicado em produção)
-├── inc/              # Helpers e includes
-├── public/           # DocumentRoot (index.php, assets)
-├── scripts/          # CRUD e controllers
+├── inc/              # Helpers, segurança, sessão, rate limit e includes
+├── public/           # DocumentRoot (index.php, assets e imagens)
+├── scripts/          # Controllers, CRUD, setup e release
 ├── src/              # Classes (Router, Database, Middleware)
-├── tests/            # Testes PHPUnit
-├── vendor/           # Dependências Composer
-├── Dockerfile        # Build da imagem PHP
+├── tests/            # Testes PHPUnit e smoke test HTML
+├── vendor/           # Dependências Composer (gerado, não versionado)
+├── Dockerfile        # Build da imagem PHP 8.5
 ├── docker-compose.yml
 ├── docker-compose.dev.yml  # Override de desenvolvimento (phpMyAdmin)
+├── composer.json / composer.lock
 ├── phpstan.neon      # Configuração do PHPStan
-└── .env.example
+├── psalm.xml         # Configuração do Psalm (taint analysis)
+├── phpunit.xml       # Configuração do PHPUnit
+├── .env.example      # Variáveis para execução local
+└── .env.example.docker # Variáveis para Docker Compose
 ```
 
 ## Licença
