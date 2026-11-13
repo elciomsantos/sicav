@@ -6,6 +6,14 @@
 **Classificação:** Confidencial / Padrão de segurança  
 **Aplicação:** Sistemas Web desenvolvidos em PHP, MySQL, JavaScript e HTML executados em Docker Compose.
 
+> **Nota de aplicação — SICAV (revisão de 2026-11-13):** este documento é o
+> padrão normativo usado pelo Sistema de Visitantes (SICAV). O estado atual do
+> sistema está descrito no [README](../README.md) e no
+> [PLANO_IMPLEMENTACAO.md](PLANO_IMPLEMENTACAO.md): PHP 8.5 na imagem Docker
+> (compatibilidade declarada com PHP 8.4+), MySQL 8.4, Apache e Docker Compose.
+> O MFA/TOTP previsto na §12 foi removido do produto em 2026-08-20 e permanece
+> como requisito normativo pendente de decisão de escopo.
+
 ---
 
 # 1. OBJETIVO
@@ -365,6 +373,12 @@ Recovery codes deverão ser:
 - armazenados de forma segura;
 - de uso único;
 - auditáveis.
+
+> **Estado no SICAV (2026-11-13):** o MFA não está implementado. O TOTP chegou
+> a ser desenvolvido em 2026-08 e foi removido em 2026-08-20; não existem
+> tabelas de MFA, rotas de desafio nem `VISITORPASS_MFA_KEY` no sistema atual.
+> Os controles compensatórios em uso são Argon2id, bloqueio após tentativas
+> inválidas, rate limiting, sessão única e auditoria.
 
 ---
 
@@ -1138,7 +1152,7 @@ O Dockerfile deverá:
 Exemplo:
 
 ```dockerfile
-FROM php:8.4-fpm-alpine
+FROM php:8.5-fpm-alpine
 
 RUN addgroup -S app && \
     adduser -S app -G app
