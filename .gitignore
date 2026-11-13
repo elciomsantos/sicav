@@ -32,3 +32,6 @@ node_modules/
 
 # Config
 /config/database.local.php
+
+# Manuais locais (não versionados)
+/manual.md
