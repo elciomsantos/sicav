@@ -1,13 +1,18 @@
 # Override para desenvolvimento: adiciona phpMyAdmin.
 # Uso: não é necessário para o funcionamento do sistema, apenas para facilitar a administração do banco de dados.
 # NAO utilizar em producao.
+#
+# As senhas continuam obrigatorias aqui (o compose base falha sem
+# VISITORPASS_DB_PASS e MYSQL_ROOT_PASSWORD): copie .env.example.docker para
+# .env e ajuste os valores antes de subir o ambiente de desenvolvimento.
 services:
   app:
     build:
       args:
         ENVIRONMENT: development
   phpmyadmin:
-    image: phpmyadmin:5.2
+    # Digest fixado: build reproduzivel. Atualizar via ./scripts/pin-images.sh
+    image: phpmyadmin:5.2@sha256:e4b3eb5305cd42d21512bb55def2bab52625d56df927ad4ee1864a9354c84d40
     ports:
       - "${PMA_PORT:-8081}:80"
     environment:

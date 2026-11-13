@@ -1,10 +1,16 @@
 # Deploy em producao: copie este projeto para /opt/sistema-visitantes
-# (ex.: /opt/sistema-visitantes/docker-compose.yml) e execute
+# (ex.: /opt/sistema-visitantes/docker-compose.yml), crie o .env a partir de
+# .env.example.docker com senhas reais e execute
 #   cd /opt/sistema-visitantes && docker compose up -d --build
 #
 # Acesso externo: container "nginx" (reverse proxy) na porta NGINX_PORT
-# (padrao 8000). Config em deploy/nginx/default.conf. O container "app"
-# nao publica portas no host; e acessado apenas pela rede interna.
+# (padrao 8000). Em producao: http://10.10.10.208:8000 (rede interna local).
+# Config em deploy/nginx/default.conf. O container "app" nao publica portas no
+# host; e acessado apenas pela rede interna.
+#
+# Variaveis obrigatorias (sem default de desenvolvimento): VISITORPASS_DB_PASS
+# e MYSQL_ROOT_PASSWORD. Sem elas o "docker compose" falha de proposito - o
+# fallback de senha fraca violava a politica de credenciais do projeto.
 #
 # Dados persistentes (banco + fotos) ficam no drive dedicado,
 # montado em /mnt/visitantes no servidor. Ajuste via .env se necessario:
@@ -27,7 +33,7 @@ services:
       VISITORPASS_DB_PORT: 3306
       VISITORPASS_DB_NAME: ${VISITORPASS_DB_NAME:-visitorpass}
       VISITORPASS_DB_USER: ${VISITORPASS_DB_USER:-vpuser}
-      VISITORPASS_DB_PASS: ${VISITORPASS_DB_PASS:-visitorpassword}
+      VISITORPASS_DB_PASS: ${VISITORPASS_DB_PASS:?defina VISITORPASS_DB_PASS no .env}
       VISITORPASS_SESSION_TIMEOUT: ${VISITORPASS_SESSION_TIMEOUT:-3600}
       VISITORPASS_SESSION_ABSOLUTE_LIFETIME: ${VISITORPASS_SESSION_ABSOLUTE_LIFETIME:-43200}
       VISITORPASS_APP_NAME: "Sistema de Visitantes"
@@ -52,6 +58,9 @@ services:
       - /tmp
       - /var/run/apache2
       - /var/lock/apache2
+      # Conf do mod_remoteip (proxy confiavel) gerada no start pelo entrypoint.
+      # Sem este tmpfs o app registra o IP do container nginx em REMOTE_ADDR.
+      - /etc/visitantes/remoteip
     networks:
       - frontend
       - backend
@@ -65,9 +74,10 @@ services:
     pids_limit: 256
 
   nginx:
-    image: nginx:stable-alpine
+    # Digest fixado: build reproduzivel. Atualizar via ./scripts/pin-images.sh
+    image: nginx:stable-alpine@sha256:901e593c95dc85f5a729f5765516321366ef4ac401821431d408897e95287d0a
     ports:
-      # Unica porta publicada no host (acesso via http://<IP-do-servidor>:8000)
+      # Unica porta publicada no host (producao: http://10.10.10.208:8000)
       - "${NGINX_PORT:-8000}:80"
     volumes:
       - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
@@ -92,19 +102,21 @@ services:
     pids_limit: 64
 
   db:
-    image: mysql:8.4
+    # Digest fixado: build reproduzivel. Atualizar via ./scripts/pin-images.sh
+    image: mysql:8.4@sha256:a81d043930e51745522bd5c430961cf8286f0a23f0a9a2a6e0108f7ea71b0902
     command: --log-bin-trust-function-creators=1
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      # Senhas obrigatorias: sem fallback de desenvolvimento em producao.
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?defina MYSQL_ROOT_PASSWORD no .env}
       MYSQL_DATABASE: ${VISITORPASS_DB_NAME:-visitorpass}
       MYSQL_USER: ${VISITORPASS_DB_USER:-vpuser}
-      MYSQL_PASSWORD: ${VISITORPASS_DB_PASS:-visitorpassword}
+      MYSQL_PASSWORD: ${VISITORPASS_DB_PASS:?defina VISITORPASS_DB_PASS no .env}
     volumes:
       # Dados do MySQL no drive dedicado.
       # No host: chown 999:999 ${DB_DATA_DIR:-/mnt/visitantes/mysql}
       - ${DB_DATA_DIR:-/mnt/visitantes/mysql}:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
       retries: 5

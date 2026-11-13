@@ -33,6 +33,12 @@ function currentUserId(): ?int
 
 function getClientIp(): string
 {
+    // O proxy nginx e o unico cliente do container app. O Apache
+    // (mod_remoteip, conf em /etc/visitantes/remoteip/remoteip.conf, gerado por
+    // docker/entrypoint.sh) ja reescreveu REMOTE_ADDR com o IP real do cliente,
+    // aceitando X-Forwarded-For apenas do proxy confiavel. Headers de proxy NAO
+    // sao lidos aqui: assim um cliente que alcance o container diretamente nao
+    // consegue forjar o IP usado no rate limiting e na auditoria.
     return trim($_SERVER['REMOTE_ADDR'] ?? 'unknown');
 }
 

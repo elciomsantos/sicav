@@ -30,6 +30,9 @@
     <testsuite name="Helpers">
       <file>tests/HelpersTest.php</file>
     </testsuite>
+    <testsuite name="ProxyIP">
+      <file>tests/ProxyIpTest.php</file>
+    </testsuite>
     <testsuite name="Router">
       <file>tests/RouterTest.php</file>
     </testsuite>
