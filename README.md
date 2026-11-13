@@ -14,6 +14,7 @@ crachás, relatórios e auditoria.
   - [Backup e restauração](#backup-e-restauração)
   - [Atualização da stack](#atualização-da-stack)
   - [Solução de problemas](#solução-de-problemas)
+- [Fluxo de branches e releases](#fluxo-de-branches-e-releases)
 - [Instalação local (sem Docker)](#instalação-local-sem-docker)
 - [Variáveis de ambiente](#variáveis-de-ambiente)
 - [Qualidade e CI](#qualidade-e-ci)
@@ -318,9 +319,14 @@ docker compose up -d --build
 
 # 4. Migrações novas (se houver) rodam automaticamente no boot do app —
 #    docker/migrate.php é idempotente e pode rodar várias vezes com segurança
+
+# 5. Registre a versão publicada (tag vX.Y.Z no GitHub)
+./scripts/release.sh
 ```
 
 Os dados no drive dedicado (`/mnt/visitantes`) não são tocados pelo rebuild.
+O deploy é feito **somente a partir da `main`**. O fluxo completo de branches,
+PRs e versionamento está em [docs/FLUXO-GIT.md](docs/FLUXO-GIT.md).
 
 ### Solução de problemas
 
@@ -334,6 +340,31 @@ Os dados no drive dedicado (`/mnt/visitantes`) não são tocados pelo rebuild.
 | Login falha para usuário válido | Banco restaurado sem dados / schema ausente | `docker compose logs app` (procure `Migration completed`); confira com `docker compose exec db mysql -u root -p visitorpass` |
 
 Logs de qualquer serviço: `docker compose logs [-f] [app\|nginx\|db]`.
+
+## Fluxo de branches e releases
+
+- `main`: código validado e em produção. É a única origem de deploy.
+- `fix/dev-development`: integração de correções e melhorias. Recebe PRs das
+  branches de trabalho e é promovida para `main` por PR após validação.
+- Branches temporárias (`fix/*`, `feat/*`, `chore/*`, `docs/*`): saem de
+  `fix/dev-development` e são excluídas automaticamente após o merge.
+
+```text
+fix/<assunto> ──PR──▶ fix/dev-development ──PR──▶ main ──▶ deploy ──▶ tag vX.Y.Z
+```
+
+Cada versão publicada em produção recebe uma tag SemVer. Depois do deploy e da
+verificação, execute na `main`:
+
+```bash
+./scripts/release.sh          # v1.0.0 -> v1.0.1 (patch)
+./scripts/release.sh minor    # v1.0.0 -> v1.1.0
+./scripts/release.sh major    # v1.0.0 -> v2.0.0
+./scripts/release.sh 1.2.3    # versão explícita
+```
+
+O workflow `release.yml` cria a release no GitHub para cada tag `v*.*.*`.
+Detalhes e comandos de PR estão em [docs/FLUXO-GIT.md](docs/FLUXO-GIT.md).
 
 ## Instalação local (sem Docker)
 
