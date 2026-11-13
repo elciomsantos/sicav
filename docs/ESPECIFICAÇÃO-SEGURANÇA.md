@@ -229,30 +229,38 @@ Somente o hash SHA-256 deverá ser persistido.
 Estrutura mínima:
 
 ```sql
-CREATE TABLE sessions (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    user_id BIGINT UNSIGNED NOT NULL,
-    token_hash CHAR(64) NOT NULL,
-    created_at DATETIME NOT NULL,
-    last_activity_at DATETIME NOT NULL,
-    expires_at DATETIME NOT NULL,
+CREATE TABLE user_sessions (
+    id INT NOT NULL AUTO_INCREMENT,
+    usuario_id INT NOT NULL,
+    session_token_hash CHAR(64) NOT NULL,
+    session_id VARCHAR(128) NOT NULL,
+    ip_address VARCHAR(45) NOT NULL,
+    user_agent VARCHAR(255) NOT NULL,
+    active TINYINT(1) NOT NULL DEFAULT 1,
+    last_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NULL,
+    last_activity_at DATETIME NULL,
     revoked_at DATETIME NULL,
-    ip_address VARCHAR(45) NULL,
-    user_agent VARCHAR(512) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
-    UNIQUE KEY uq_sessions_token_hash (token_hash),
-    KEY idx_sessions_user_id (user_id),
-    KEY idx_sessions_expires_at (expires_at),
+    UNIQUE KEY (usuario_id),
+    KEY idx_user_sessions_active (active),
+    KEY idx_user_sessions_expires (expires_at),
+    KEY idx_user_sessions_updated_at (updated_at),
 
-    CONSTRAINT fk_sessions_user
-        FOREIGN KEY (user_id)
-        REFERENCES users(id)
+    CONSTRAINT fk_user_sessions_usuario
+        FOREIGN KEY (usuario_id)
+        REFERENCES usuarios(id)
         ON DELETE CASCADE
 );
 ```
 
-A especificação existente já define `token_hash` como índice `UNIQUE` e os índices para usuário e expiração.
+No SICAV, o schema real está em `docker/migrate.php` e garante **uma sessão
+ativa por usuário**: o índice `UNIQUE` está em `usuario_id`, não em
+`session_token_hash`. O hash do token é persistido em `session_token_hash` para
+validação, sem índice único próprio.
 
 ---
 
@@ -273,6 +281,11 @@ Requisitos:
 - prefixo `__Host-`;
 - sem `Domain`.
 
+> **No SICAV (2026-11-13):** em HTTPS o cookie é `__Host-SID` com `Secure`,
+> `HttpOnly` e `SameSite=Strict`; em HTTP interno (porta 8000, sem TLS) o app
+> mantém `PHPSESSID` com `SameSite=Lax` e sem `Secure`. O requisito de produção
+> acima depende de TLS terminado antes da aplicação.
+
 Credenciais de sessão não poderão ser armazenadas em:
 
 - `localStorage`;
@@ -282,7 +295,8 @@ Credenciais de sessão não poderão ser armazenadas em:
 - query string;
 - fragment.
 
-Esses controles estão definidos na especificação de sessões existente.
+No SICAV, esses controles estão implementados em `config/app.php`
+(`configureSessionSecurity()`).
 
 ---
 
@@ -313,6 +327,9 @@ Enviar cookie protegido
 ```
 
 Após autenticação deverá ocorrer regeneração da sessão.
+
+> **No SICAV (2026-11-13):** o fluxo atual não possui o passo de MFA; o login
+> segue direto para a home após a validação da senha. Ver §12.
 
 PHP nativo:
 
@@ -418,7 +435,8 @@ Verificar proprietário/permissão
 Executar operação
 ```
 
-A especificação anterior explicitamente ressalta que proteger `user_id` não elimina falhas de autorização sobre objetos.
+Proteger o `user_id` no cliente não elimina falhas de autorização sobre objetos
+(IDOR/BOLA).
 
 ---
 
@@ -597,7 +615,8 @@ Quando a aplicação não precisar ser incorporada:
 frame-ancestors 'none'
 ```
 
-A especificação original já estabelece esses headers como requisitos de segurança da aplicação.
+No SICAV, esses headers são emitidos em `public/index.php`; o HSTS é
+condicional a HTTPS.
 
 ---
 
@@ -611,6 +630,10 @@ HTTP deverá:
 - ser bloqueado.
 
 Tokens, cookies de sessão e credenciais nunca poderão ser enviados por HTTP.
+
+> **No SICAV (2026-11-13):** o acesso é HTTP na rede interna (porta 8000) e o
+> TLS deve ser terminado por um proxy reverso à frente do nginx. Enquanto isso
+> não existir, este requisito permanece pendente para exposição externa.
 
 HSTS deverá ser utilizado quando a operação permanente em HTTPS estiver garantida.
 
@@ -841,6 +864,11 @@ Utilizar:
 
 `.env` contendo credenciais não deverá ser versionado.
 
+> **Pendência conhecida no SICAV (2026-11-13):** o `.env` é ignorado pelo Git,
+> mas o `docker-compose.yml` mantém fallbacks de desenvolvimento
+> (`visitorpassword`, `rootpassword`) e o `.env.example.docker` replica esses
+> valores. Em produção, defina senhas fortes e trate os defaults como inseguros.
+
 ---
 
 # 31. MYSQL
@@ -939,7 +967,7 @@ Não montar desnecessariamente:
 /sys
 ```
 
-Essas configurações são tratadas como regras eliminatórias no baseline de hardening fornecido.
+Essas configurações são regras eliminatórias desta especificação.
 
 ---
 
@@ -986,7 +1014,7 @@ DAC_READ_SEARCH
 SYS_RAWIO
 ```
 
-O documento de hardening estabelece `cap_drop: ALL` como baseline.
+Esta especificação estabelece `cap_drop: ALL` como baseline.
 
 ---
 
@@ -1075,9 +1103,11 @@ Exemplo:
 
 ```yaml
 ports:
-  - "80:80"
-  - "443:443"
+  - "8000:80"
 ```
+
+No SICAV, apenas o container `nginx` publica a porta externa (`NGINX_PORT`,
+padrão 8000); `app` e `db` não publicam portas no host.
 
 A porta do PHP-FPM, caso utilizado, normalmente não deverá ser publicada externamente.
 
@@ -1131,7 +1161,7 @@ Nunca registrar:
 - MFA;
 - secrets.
 
-O baseline Docker também estabelece rotação e retenção como requisitos.
+Esta especificação também estabelece rotação e retenção de logs como requisitos.
 
 ---
 
@@ -1152,19 +1182,23 @@ O Dockerfile deverá:
 Exemplo:
 
 ```dockerfile
-FROM php:8.5-fpm-alpine
+FROM php:8.5-apache
 
-RUN addgroup -S app && \
-    adduser -S app -G app
+RUN groupadd --gid 1000 app && \
+    useradd --uid 1000 --gid app --no-create-home \
+      --home-dir /var/www/html --shell /usr/sbin/nologin app
 
 WORKDIR /var/www/html
 
 COPY --chown=app:app . .
 
 USER app
+
+CMD ["apache2-foreground"]
 ```
 
-A versão real deverá ser definida de acordo com a versão PHP efetivamente suportada pelo projeto.
+No SICAV, a imagem real usa `php:8.5-apache` (Debian) e ajusta também
+`APACHE_RUN_USER`/`APACHE_RUN_GROUP` para `app`.
 
 ---
 
@@ -1217,11 +1251,18 @@ image@sha256:<digest>
 
 Imagens deverão ser provenientes de fontes confiáveis.
 
+> **Pendência conhecida no SICAV (2026-11-13):** `nginx:stable-alpine` e
+> `composer:2` usam tags de linha; `php:8.5-apache` e `mysql:8.4` usam tags de
+> versão. Fixar patch ou digest é uma melhoria pendente.
+
 ---
 
 # 45. SCAN DE VULNERABILIDADES
 
 O CI/CD deverá executar scanner de imagem.
+
+> **Pendência conhecida no SICAV (2026-11-13):** o CI atual não executa Trivy,
+> Grype, Docker Scout nem scanner equivalente de imagem.
 
 Ferramentas possíveis:
 
@@ -1280,6 +1321,10 @@ npm audit
 ```
 
 quando aplicável ao projeto.
+
+> **No SICAV:** não existe `package.json` nem lockfile; os dois arquivos JS são
+> próprios e as bibliotecas de terceiros vêm por CDN. Portanto `npm audit` não
+> se aplica ao estado atual.
 
 Dependências críticas deverão ser avaliadas antes da promoção para produção.
 
@@ -1340,6 +1385,12 @@ AUTHORIZATION_DENIED
 SECURITY_EVENT
 ```
 
+> **No SICAV (2026-11-13):** são emitidos `LOGIN_SUCCESS`, `LOGIN_FAILURE`,
+> `LOGOUT`, `SESSION_CREATED`, `SESSION_EXPIRED`, `SESSION_REVOKED`,
+> `AUTHORIZATION_DENIED` e `RATE_LIMIT_TRIGGERED`. Eventos de MFA e
+> compartilhamento não se aplicam ao estado atual; `PASSWORD_*`,
+> `PERMISSION_CHANGED`, `ROLE_CHANGED` e `RESOURCE_*` ainda não são emitidos.
+
 Nunca registrar:
 
 ```text
@@ -1374,6 +1425,9 @@ O mesmo `request_id` deverá ser utilizado para correlacionar os eventos.
 
 O `request_id` não deverá funcionar como credencial.
 
+> **Pendência conhecida no SICAV (2026-11-13):** o `request_id` é gerado no PHP
+> (`inc/log_event.php`); o nginx ainda não gera nem repassa `X-Request-ID`.
+
 ---
 
 # 51. PROXY TRUST
@@ -1389,6 +1443,12 @@ Forwarded
 quando a requisição vier de um proxy explicitamente confiável.
 
 Headers enviados diretamente por clientes externos não deverão ser utilizados como fonte confiável de IP.
+
+> **Pendência conhecida no SICAV (2026-11-13):** `getClientIp()` usa apenas
+> `REMOTE_ADDR`. Como o nginx faz proxy para o app, o IP real do cliente não
+> chega ao PHP enquanto o Apache não usar `mod_remoteip` (ou o app não validar
+> os headers apenas quando a origem for o proxy). Isso afeta o rate limiting
+> por IP e o IP registrado na auditoria.
 
 ---
 
@@ -1420,7 +1480,7 @@ O host Docker deverá:
 - possuir LSM ativo;
 - desabilitar serviços desnecessários.
 
-O baseline fornecido estabelece janela operacional de até 7 dias para atualizações de rotina, salvo impossibilidade documentada.
+Esta especificação estabelece janela operacional de até 7 dias para atualizações de rotina, salvo impossibilidade documentada.
 
 ---
 
@@ -1474,7 +1534,9 @@ Ajustar a política quando necessário.
 
 # 57. DOCKER COMPOSE — BASE DE PRODUÇÃO
 
-Modelo conceitual:
+Modelo conceitual (não é o compose real do SICAV; o arquivo atual usa os
+serviços `app`, `nginx` e `db`, bind mounts em `/mnt/visitantes` e rede
+`frontend`/`backend`):
 
 ```yaml
 services:

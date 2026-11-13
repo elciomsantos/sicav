@@ -6,7 +6,8 @@
 > imagem Docker (compatibilidade declarada com PHP 8.4+), MySQL 8.4, Apache,
 > Docker Compose, PHPUnit 13, PHPStan 2 (nível 5), Psalm 7 e Composer 2. Ao
 > auditar o SICAV, preencha a matriz da §6 com esses valores e considere que o
-> MFA/TOTP foi removido do produto em 2026-08-20.
+> MFA/TOTP foi removido do produto em 2026-08-20. Os artefatos formais da §51
+> ainda não foram produzidos.
 
 ## 1. Visão Geral
 
@@ -221,14 +222,18 @@ Antes da auditoria, deverá ser criada uma matriz contendo as tecnologias e vers
 
 | Componente | Tecnologia | Versão | Status | Fonte |
 |---|---|---:|---|---|
-| Linguagem | PHP | TBD | TBD | Oficial |
-| Framework | TBD | TBD | TBD | Oficial |
-| Composer | Composer | TBD | TBD | Oficial |
-| Banco | TBD | TBD | TBD | Oficial |
-| Web Server | Apache/Nginx | TBD | TBD | Oficial |
-| PHP Runtime | CLI/FPM/Apache Module | TBD | TBD | Oficial |
-| Docker | Docker Engine | TBD | TBD | Oficial |
-| Sistema operacional | TBD | TBD | TBD | Oficial |
+| Linguagem | PHP | 8.5 na imagem Docker; mínimo `>=8.4` | Suportado | `Dockerfile`, `composer.json` |
+| Framework | Nenhum (PHP puro, classes próprias em `src/`) | — | N/A | `composer.json`, `src/` |
+| Composer | Composer | 2 | Suportado | `Dockerfile`, CI |
+| Banco | MySQL | 8.4 | LTS | `docker-compose.yml` |
+| Web Server | nginx + Apache (`mod_php`) | nginx `stable-alpine`; Apache da imagem PHP 8.5 | Suportado | `docker-compose.yml`, `docker/apache.conf` |
+| PHP Runtime | Módulo Apache (`mod_php`), não FPM | 8.5 | Suportado | `Dockerfile` |
+| Docker | Docker Engine + Compose v2 | Depende do host (não versionado no repo) | Host-dependente | `docker-compose.yml` |
+| Sistema operacional | Debian (imagem PHP); Alpine (nginx) | Base das imagens oficiais | Suportado | `Dockerfile`, `docker-compose.yml` |
+| Node | Node.js | 20 no build; 22 no CI (sem runtime Node) | Suportado | `Dockerfile`, `.github/workflows/tests.yml` |
+| Testes | PHPUnit | 13.4 | Suportado | `composer.json` |
+| Análise estática | PHPStan / Psalm | 2.1 (nível 5) / 7.2 | Suportado | `composer.json`, `phpstan.neon`, `psalm.xml` |
+| Extensões PHP | pdo, pdo_mysql, gd, zip; CI também mbstring, dom, sodium | — | Suportado | `Dockerfile`, CI |
 
 Também deverão ser identificados:
 
@@ -267,6 +272,9 @@ Testes
 Scripts
 CI/CD
 ```
+
+> **No SICAV (2026-11-13):** não há PHP-FPM; o runtime é o módulo Apache
+> (`mod_php`) da imagem `php:8.5-apache`.
 
 As versões deverão ser obtidas preferencialmente por execução direta no ambiente.
 
@@ -1628,6 +1636,11 @@ Trivy ou scanner equivalente para containers
 
 Nenhuma ferramenta deverá ser considerada obrigatória se não for compatível com a arquitetura ou com a versão efetivamente utilizada.
 
+> **No SICAV (2026-11-13):** o CI executa PHPStan, Psalm (taint), PHPUnit,
+> Composer Audit, CodeQL (JavaScript/TypeScript e GitHub Actions), Hadolint,
+> ShellCheck e Dependency Review, com cobertura PCOV. Não há PHP_CodeSniffer,
+> secret scan, container scan, benchmark nem DAST no estado atual.
+
 Cada execução deverá registrar:
 
 ```text
@@ -1653,10 +1666,10 @@ Ferramenta:
 PHPStan
 
 Comando:
-vendor/bin/phpstan analyse
+vendor/bin/phpstan analyse --no-progress --memory-limit=1G
 
 Ambiente:
-PHP 8.x
+PHP 8.5 (imagem) / PHP 8.4-8.5 (CI)
 
 Resultado:
 ...
@@ -1743,6 +1756,11 @@ ARCHITECTURE_REVIEW.md
 AUDIT_MATRIX.md
 EVIDENCE_INDEX.md
 ```
+
+> **No SICAV (2026-11-13):** o ciclo formal de auditoria ainda não foi
+> concluído e nenhum destes artefatos existe em `docs/`. O
+> `PLANO_IMPLEMENTACAO.md` registra o baseline e as correções aplicadas, mas
+> não substitui os relatórios exigidos nesta seção.
 
 ---
 
