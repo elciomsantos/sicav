@@ -1,6 +1,8 @@
-FROM composer:2 AS composer
+# Imagens fixadas por digest (sha256) para build reproduzivel.
+# Para atualizar: ./scripts/pin-images.sh
+FROM composer:2@sha256:ca11f643d7791ebdd90a34fc20caf11380d434007ae539a9ea75cd9212e13dca AS composer
 
-FROM php:8.5-apache
+FROM php:8.5-apache@sha256:08af36df144462d84c7f16190557eec06cb9f656882685610b712a15eec54d46
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -30,7 +32,7 @@ RUN set -eux; \
     && docker-php-ext-enable pdo_mysql gd zip
 
 RUN set -eux; \
-    a2enmod rewrite headers expires; \
+    a2enmod rewrite headers expires remoteip; \
     echo "ServerName localhost" >> /etc/apache2/apache2.conf
 
 COPY docker/apache.conf /etc/apache2/sites-available/000-default.conf

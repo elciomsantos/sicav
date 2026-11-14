@@ -864,10 +864,12 @@ Utilizar:
 
 `.env` contendo credenciais não deverá ser versionado.
 
-> **Pendência conhecida no SICAV (2026-11-13):** o `.env` é ignorado pelo Git,
-> mas o `docker-compose.yml` mantém fallbacks de desenvolvimento
-> (`visitorpassword`, `rootpassword`) e o `.env.example.docker` replica esses
-> valores. Em produção, defina senhas fortes e trate os defaults como inseguros.
+> **No SICAV (2026-11-13):** o `.env` é ignorado pelo Git (`.dockerignore` e
+> `.gitignore`) e o `docker-compose.yml` **não tem mais fallback** para
+> `VISITORPASS_DB_PASS` e `MYSQL_ROOT_PASSWORD`: sem essas variáveis o
+> `docker compose` interrompe com mensagem explícita (inclusive no
+> `healthcheck` do banco). Os exemplos `.env.example.docker` e `.env.example`
+> trazem apenas placeholders a substituir.
 
 ---
 
@@ -1251,9 +1253,11 @@ image@sha256:<digest>
 
 Imagens deverão ser provenientes de fontes confiáveis.
 
-> **Pendência conhecida no SICAV (2026-11-13):** `nginx:stable-alpine` e
-> `composer:2` usam tags de linha; `php:8.5-apache` e `mysql:8.4` usam tags de
-> versão. Fixar patch ou digest é uma melhoria pendente.
+> **No SICAV (2026-11-13):** todas as imagens estão fixadas por digest
+> (`imagem:tag@sha256:...`): `php:8.5-apache` e `composer:2` no `Dockerfile`,
+> `nginx:stable-alpine` e `mysql:8.4` no `docker-compose.yml` e
+> `phpmyadmin:5.2` no override de desenvolvimento. A atualização dos digests
+> é feita por `./scripts/pin-images.sh`.
 
 ---
 
@@ -1261,8 +1265,11 @@ Imagens deverão ser provenientes de fontes confiáveis.
 
 O CI/CD deverá executar scanner de imagem.
 
-> **Pendência conhecida no SICAV (2026-11-13):** o CI atual não executa Trivy,
-> Grype, Docker Scout nem scanner equivalente de imagem.
+> **No SICAV (2026-11-13):** `ci.yml` roda Trivy (`aquasecurity/trivy-action`)
+> na imagem do app e nas imagens base (`nginx`, `mysql`, `phpmyadmin`) com
+> `--severity HIGH,CRITICAL --ignore-unfixed`, falhando o job quando houver
+> achado. O `codeql.yml` cobre dependências PHP/JS e o `dependency-review.yml`
+> revisa dependências em PRs; nenhum deles substitui o scanner de imagem.
 
 Ferramentas possíveis:
 
@@ -1425,8 +1432,12 @@ O mesmo `request_id` deverá ser utilizado para correlacionar os eventos.
 
 O `request_id` não deverá funcionar como credencial.
 
-> **Pendência conhecida no SICAV (2026-11-13):** o `request_id` é gerado no PHP
-> (`inc/log_event.php`); o nginx ainda não gera nem repassa `X-Request-ID`.
+> **No SICAV (2026-11-13):** o nginx gera o `$request_id` por requisição e o
+> encaminha em `X-Request-ID` (`deploy/nginx/default.conf`), e o log de acesso
+> do nginx começa com esse valor. `getRequestId()`
+> (`inc/log_event.php`) reutiliza o valor do proxy quando ele respeita o padrão
+> `[A-Za-z0-9._-]{8,128}` e só gera um ID local (`bin2hex(random_bytes(16))`)
+> caso contrário — header de cliente nunca é usado sem validação.
 
 ---
 
@@ -1444,11 +1455,16 @@ quando a requisição vier de um proxy explicitamente confiável.
 
 Headers enviados diretamente por clientes externos não deverão ser utilizados como fonte confiável de IP.
 
-> **Pendência conhecida no SICAV (2026-11-13):** `getClientIp()` usa apenas
-> `REMOTE_ADDR`. Como o nginx faz proxy para o app, o IP real do cliente não
-> chega ao PHP enquanto o Apache não usar `mod_remoteip` (ou o app não validar
-> os headers apenas quando a origem for o proxy). Isso afeta o rate limiting
-> por IP e o IP registrado na auditoria.
+> **No SICAV (2026-11-13):** `mod_remoteip` está habilitado no `Dockerfile` e
+> a lista de proxies é gerada no boot por `docker/entrypoint.sh`
+> (`/etc/visitantes/remoteip/remoteip.conf`, incluído pelo vhost via
+> `IncludeOptional`). A diretiva é `RemoteIPInternalProxy`: o cliente da rede
+> interna tem IP privado (RFC1918), que o `mod_remoteip` descarta quando
+> apresentado por um proxy "externo". `getClientIp()`
+> (`inc/security.php`) lê apenas `REMOTE_ADDR` — portanto o valor de IP usado
+> no rate limiting e na auditoria só muda quando a requisição entra pelo proxy
+> confiável. O valor de `$_SERVER['HTTP_X_FORWARDED_FOR']` permanece visível no
+> PHP, mas nunca é usado para decidir o IP.
 
 ---
 

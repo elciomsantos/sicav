@@ -79,7 +79,20 @@ for i in $(seq 1 60); do
 done
 
 echo "--> Verificando usuarios padrao..."
-USERS=$("${COMPOSE[@]}" exec -T db mysql -u"${VISITORPASS_DB_USER:-vpuser}" -p"${VISITORPASS_DB_PASS:-visitorpassword}" "${VISITORPASS_DB_NAME:-visitorpass}" -N -e \
+# As credenciais vivem no .env (lido pelo compose), nao no ambiente do shell:
+# le o arquivo antes de consultar o banco.
+env_from_dotenv() {
+    grep -E "^$1=" .env 2>/dev/null | head -1 | cut -d= -f2-
+}
+
+DB_USER=$(env_from_dotenv VISITORPASS_DB_USER)
+DB_USER=${DB_USER:-vpuser}
+DB_NAME=$(env_from_dotenv VISITORPASS_DB_NAME)
+DB_NAME=${DB_NAME:-visitorpass}
+DB_PASS=$(env_from_dotenv VISITORPASS_DB_PASS)
+
+USERS=$("${COMPOSE[@]}" exec -T -e MYSQL_PWD="$DB_PASS" db \
+    mysql -u"$DB_USER" "$DB_NAME" -N -e \
     "SELECT usuario, nivel_acesso FROM usuarios ORDER BY id;" 2>/dev/null || true)
 
 echo "$USERS"
