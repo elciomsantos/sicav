@@ -1,5 +1,8 @@
 # Configuracao do Hadolint usada no CI (.github/workflows/ci.yml)
 failure-threshold: warning
 ignored:
-  # A imagem base oficial php:8.2-apache nao fixa versoes de pacotes apt
+  # A imagem base oficial php:8.5-apache nao fixa versoes de pacotes apt
   - DL3008
+  # O upgrade e intencional: aplica correcoes de seguranca da distro
+  # (apache2, linux-libc-dev) sobre a imagem base fixada por digest.
+  - DL3005
