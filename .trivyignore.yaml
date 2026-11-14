@@ -1,0 +1,127 @@
+# Excecoes justificadas do scan Trivy para imagens de terceiros.
+#
+# Aplicado somente ao scan da imagem oficial mysql:8.4. O workflow passa este
+# arquivo explicitamente (trivyignores: .trivyignore.yaml), pois o formato YAML
+# exige --ignorefile. Cada excecao tem prazo: depois de expired_at o Trivy
+# volta a falhar e a equipe precisa reavaliar (atualizar o digest ou renovar a
+# justificativa).
+#
+# Componentes afetados, nenhum usado pela aplicacao:
+#   - mysqlsh (MySQL Shell, Python) em /usr/lib/mysqlsh: ferramenta
+#     administrativa/interativa; o container inicia apenas o mysqld.
+#   - gosu em /usr/local/bin/gosu: usado pelo entrypoint da imagem apenas para
+#     trocar para o usuario mysql; nao processa rede, TLS ou entrada externa.
+# Os binarios sao embutidos pela Oracle na imagem oficial; nao ha como
+# atualiza-los sem reconstruir a imagem inteira a partir do upstream.
+
+vulnerabilities:
+  # mysqlsh - dependencias Python (usr/lib/mysqlsh)
+  - id: GHSA-6q48-6c7w-9gw2
+    statement: certifi embutido no mysqlsh; componente administrativo nao usado pela aplicacao
+    expired_at: 2027-02-28
+  - id: CVE-2026-69247
+    statement: cryptography embutida no mysqlsh; componente administrativo nao usado pela aplicacao
+    expired_at: 2027-02-28
+  - id: CVE-2026-69249
+    statement: cryptography embutida no mysqlsh; componente administrativo nao usado pela aplicacao
+    expired_at: 2027-02-28
+  - id: GHSA-537c-gmf6-5ccf
+    statement: OpenSSL embutido no wheel de cryptography do mysqlsh; componente nao usado
+    expired_at: 2027-02-28
+  - id: CVE-2026-27459
+    statement: pyOpenSSL embutido no mysqlsh; componente administrativo nao usado pela aplicacao
+    expired_at: 2027-02-28
+  - id: CVE-2026-44431
+    statement: urllib3 embutido no mysqlsh; componente administrativo nao usado pela aplicacao
+    expired_at: 2027-02-28
+  - id: CVE-2026-44432
+    statement: urllib3 embutido no mysqlsh; componente administrativo nao usado pela aplicacao
+    expired_at: 2027-02-28
+  - id: CVE-2026-97687
+    statement: urllib3 embutido no mysqlsh; componente administrativo nao usado pela aplicacao
+    expired_at: 2027-02-28
+  - id: CVE-2026-97689
+    statement: urllib3 embutido no mysqlsh; componente administrativo nao usado pela aplicacao
+    expired_at: 2027-02-28
+
+  # gosu - Go stdlib (usr/local/bin/gosu)
+  # O gosu so executa setuid/setgid para o usuario mysql no entrypoint; os
+  # CVEs de crypto/tls, x509, net/url e net/mail nao sao alcancaveis.
+  - id: CVE-2025-68121
+    statement: gosu apenas troca de usuario; nao usa crypto/tls
+    expired_at: 2027-02-28
+  - id: CVE-2025-61726
+    statement: gosu apenas troca de usuario; nao usa net/url com entrada externa
+    expired_at: 2027-02-28
+  - id: CVE-2025-61729
+    statement: gosu apenas troca de usuario; nao usa crypto/x509
+    expired_at: 2027-02-28
+  - id: CVE-2026-111943
+    statement: gosu apenas troca de usuario; nao usa crypto/x509
+    expired_at: 2027-02-28
+  - id: CVE-2026-25679
+    statement: gosu apenas troca de usuario; nao usa net/url com entrada externa
+    expired_at: 2027-02-28
+  - id: CVE-2026-27145
+    statement: gosu apenas troca de usuario; nao usa crypto/x509
+    expired_at: 2027-02-28
+  - id: CVE-2026-32280
+    statement: gosu apenas troca de usuario; nao usa crypto/x509 nem crypto/tls
+    expired_at: 2027-02-28
+  - id: CVE-2026-32281
+    statement: gosu apenas troca de usuario; nao usa crypto/x509
+    expired_at: 2027-02-28
+  - id: CVE-2026-32283
+    statement: gosu apenas troca de usuario; nao usa crypto/tls
+    expired_at: 2027-02-28
+  - id: CVE-2026-33811
+    statement: gosu apenas troca de usuario; nao usa pacotes de rede
+    expired_at: 2027-02-28
+  - id: CVE-2026-33814
+    statement: gosu apenas troca de usuario; nao usa net/http
+    expired_at: 2027-02-28
+  - id: CVE-2026-33818
+    statement: gosu apenas troca de usuario; nao usa encoding/asn1
+    expired_at: 2027-02-28
+  - id: CVE-2026-39820
+    statement: gosu apenas troca de usuario; nao usa net/mail
+    expired_at: 2027-02-28
+  - id: CVE-2026-39821
+    statement: gosu apenas troca de usuario; nao usa net/http com IDNA
+    expired_at: 2027-02-28
+  - id: CVE-2026-39822
+    statement: gosu apenas troca de usuario; codigo vulneravel fora do caminho de execucao
+    expired_at: 2027-02-28
+  - id: CVE-2026-39836
+    statement: gosu apenas troca de usuario; codigo vulneravel fora do caminho de execucao
+    expired_at: 2027-02-28
+  - id: CVE-2026-42499
+    statement: gosu apenas troca de usuario; codigo vulneravel fora do caminho de execucao
+    expired_at: 2027-02-28
+  - id: CVE-2026-42504
+    statement: gosu apenas troca de usuario; codigo vulneravel fora do caminho de execucao
+    expired_at: 2027-02-28
+  - id: CVE-2026-56853
+    statement: gosu apenas troca de usuario; codigo vulneravel fora do caminho de execucao
+    expired_at: 2027-02-28
+  - id: CVE-2026-56858
+    statement: gosu apenas troca de usuario; codigo vulneravel fora do caminho de execucao
+    expired_at: 2027-02-28
+  - id: CVE-2026-56859
+    statement: gosu apenas troca de usuario; codigo vulneravel fora do caminho de execucao
+    expired_at: 2027-02-28
+  - id: CVE-2026-56860
+    statement: gosu apenas troca de usuario; codigo vulneravel fora do caminho de execucao
+    expired_at: 2027-02-28
+  - id: CVE-2026-56862
+    statement: gosu apenas troca de usuario; codigo vulneravel fora do caminho de execucao
+    expired_at: 2027-02-28
+  - id: CVE-2026-78667
+    statement: gosu apenas troca de usuario; codigo vulneravel fora do caminho de execucao
+    expired_at: 2027-02-28
+  - id: CVE-2026-78669
+    statement: gosu apenas troca de usuario; codigo vulneravel fora do caminho de execucao
+    expired_at: 2027-02-28
+  - id: CVE-2026-97031
+    statement: gosu apenas troca de usuario; codigo vulneravel fora do caminho de execucao
+    expired_at: 2027-02-28

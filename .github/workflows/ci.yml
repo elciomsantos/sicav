@@ -219,26 +219,51 @@ jobs:
           exit-code: "1"
           format: table
 
-  scan-base:
-    name: Image scan - base images (Trivy)
+  scan-nginx:
+    name: Image scan - nginx (Trivy)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        image:
-          - nginx:stable-alpine
-          - mysql:8.4
-          - phpmyadmin:5.2
     steps:
       - uses: actions/checkout@v7
 
-      - name: Scan ${{ matrix.image }} for HIGH/CRITICAL vulnerabilities
+      # A imagem do nginx e construida localmente (docker/nginx.Dockerfile)
+      # sobre o digest fixado, com "apk upgrade" para aplicar correcoes que
+      # ainda nao estao no build oficial do Alpine.
+      - name: Build nginx image
+        run: docker build -f docker/nginx.Dockerfile -t sicav-nginx:scan .
+
+      - name: Scan image for HIGH/CRITICAL vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ${{ matrix.image }}
+          image-ref: sicav-nginx:scan
           scan-type: image
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
           format: table
+
+  scan-base:
+    name: Image scan - mysql (Trivy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      MYSQL_IMAGE: mysql:8.4@sha256:a81d043930e51745522bd5c430961cf8286f0a23f0a9a2a6e0108f7ea71b0902
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Scan mysql for HIGH/CRITICAL vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.MYSQL_IMAGE }}
+          scan-type: image
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          # Componentes auxiliares da imagem oficial (mysqlsh/gosu) nao usados
+          # pela aplicacao; excecoes justificadas e com validade no arquivo.
+          trivyignores: .trivyignore.yaml
+          exit-code: "1"
+          format: table
+
+  # O phpMyAdmin nao entra no gate de producao: ele existe apenas no
+  # docker-compose.dev.yml e nao e publicado no deploy. A validacao do override
+  # de desenvolvimento continua no job "Docker Compose config".

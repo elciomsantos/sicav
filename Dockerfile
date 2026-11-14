@@ -11,16 +11,22 @@ LABEL description="Sistema de Gerenciamento de Visitantes"
 
 ARG ENVIRONMENT=production
 
+# Aplica as atualizacoes de seguranca publicadas depois da imagem base
+# (ex.: apache2 2.4.69 -> 2.4.71 e linux-libc-dev). O digest da imagem base
+# continua fixado; o apt busca apenas correcoes da distro no momento do build.
 RUN set -eux; \
-    apt-get update && apt-get install -y --no-install-recommends \
+    export DEBIAN_FRONTEND=noninteractive; \
+    apt-get update; \
+    apt-get upgrade -y; \
+    apt-get install -y --no-install-recommends \
         libpng-dev \
         libjpeg-dev \
         libfreetype6-dev \
         libzip-dev \
         unzip \
         git \
-        curl \
-    && rm -rf /var/lib/apt/lists/*
+        curl; \
+    rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \
     docker-php-ext-configure gd --with-freetype --with-jpeg; \
@@ -51,15 +57,15 @@ RUN set -eux; \
     fi; \
     rm -f /usr/local/bin/composer
 
-# Install Node.js for JS tests
-RUN set -eux; \
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y --no-install-recommends nodejs && \
-    rm -rf /var/lib/apt/lists/*
-
-# Run tests
+# Node.js e testes (PHP + sintaxe JS) apenas no build de desenvolvimento.
+# A imagem de producao nao leva Node/npm: isso elimina os achados de
+# vulnerabilidade das dependencias npm empacotadas na imagem oficial do Node.
+# O check de sintaxe JS tambem roda no workflow Tests (job Frontend).
 RUN set -eux; \
     if [ "$ENVIRONMENT" != "production" ]; then \
+        curl -fsSL https://deb.nodesource.com/setup_20.x | bash -; \
+        apt-get install -y --no-install-recommends nodejs; \
+        rm -rf /var/lib/apt/lists/*; \
         vendor/bin/phpunit; \
         find public/assets/js -name '*.js' -print0 | xargs -0 -n1 node --check; \
     fi

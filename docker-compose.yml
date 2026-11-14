@@ -74,8 +74,13 @@ services:
     pids_limit: 256
 
   nginx:
-    # Digest fixado: build reproduzivel. Atualizar via ./scripts/pin-images.sh
-    image: nginx:stable-alpine@sha256:901e593c95dc85f5a729f5765516321366ef4ac401821431d408897e95287d0a
+    # Build local sobre a imagem oficial fixada por digest (docker/nginx.Dockerfile)
+    # para aplicar as atualizacoes de seguranca do Alpine (ex.: libxslt).
+    # Atualizar o digest via ./scripts/pin-images.sh --apply
+    build:
+      context: .
+      dockerfile: docker/nginx.Dockerfile
+    image: sicav-nginx:local
     ports:
       # Unica porta publicada no host (producao: http://10.10.10.208:8000)
       - "${NGINX_PORT:-8000}:80"

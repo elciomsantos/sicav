@@ -53,7 +53,7 @@
 
 | ID | Área | Achado | Evidência | Impacto | Ação recomendada | Status |
 |---|---|---|---|---|---|---|
-| P2-01 | Imagem | Imagem de produção com 1,12 GB; Node.js instalado incondicionalmente | `Dockerfile:54-58`; build real medido em 1,12 GB; Node ~95 MB + módulos ~16 MB | Maior tempo de pull/deploy, mais CVEs e superfície de ataque | Build multi-stage: compilar extensões e rodar testes em estágios separados; instalar Node só no estágio de testes | Aberto |
+| P2-01 | Imagem | Imagem de produção com 1,12 GB; Node.js instalado incondicionalmente | `Dockerfile` (build de produção); build real medido em 1,12 GB; Node ~95 MB + módulos ~16 MB | Maior tempo de pull/deploy, mais CVEs e superfície de ataque | Build multi-stage: compilar extensões e rodar testes em estágios separados; instalar Node só no estágio de testes | Parcial — Node removido da imagem de produção; multi-stage ainda pendente |
 | P2-02 | Imagem | `tests/`, `docs/`, `phpunit.xml`, `phpstan.neon`, `psalm.xml`, `docker-compose*.yml` permanecem em `/var/www/html` | Inspeção da imagem de produção | Superfície desnecessária e risco residual se o DocumentRoot for mal configurado | Remover artefatos de dev da imagem final via multi-stage/`.dockerignore` | Aberto |
 | P2-03 | Performance | OPcache habilitado, mas sem tuning | `docker/php.ini`; imagem base com `opcache.enable=On` | Menor desempenho de PHP em produção | `opcache.validate_timestamps=0`, memória 128 MB, `interned_strings_buffer=16`, `max_accelerated_files=10000`; reiniciar no deploy | Aberto |
 | P2-04 | Performance | Sem compressão no nginx e imagens estáticas pesadas | `deploy/nginx/default.conf`; `public/imagens` ~4,3 MB (`avatar.png` 2,1 MB, `logo_sts.png` 1,3 MB, `tela_fundo.png` 0,95 MB) | Primeiro carregamento mais lento | Habilitar gzip para texto/JSON/JS/CSS/SVG; converter/redimensionar imagens para WebP | Aberto |
@@ -80,6 +80,23 @@
 - `db` sem porta publicada e em rede `backend` com `internal: true`.
 - Imagens fixadas por digest; CI com PHPUnit, PHPStan, Psalm, Trivy, ShellCheck, Hadolint e smoke test.
 - `.env` fora do Git e da imagem; `vendor/` não versionado; logs Docker rotacionados.
+
+---
+
+## Correções aplicadas na CI (2026-11-14)
+
+O workflow **Infra** falhava nos quatro jobs de scan Trivy. Correções aplicadas:
+
+| Scan | Antes | Correção | Depois |
+|---|---|---|---|
+| `app` | 10 achados Debian + 22 `node-pkg` | `apt-get upgrade` no build (apache2 2.4.69→2.4.71, linux-libc-dev 6.12.115→6.12.117) e Node.js/npm instalados apenas no build de desenvolvimento | 0 HIGH/CRITICAL |
+| `nginx` | 3 HIGH em `libxslt 1.1.43-r3` | `docker/nginx.Dockerfile` sobre o digest fixado, com `apk upgrade` (libxslt→1.1.43-r4); Compose passou a construir a imagem | 0 HIGH/CRITICAL |
+| `mysql` | 9 Python (`mysqlsh`) + 26 Go (`gosu`) | `.trivyignore.yaml` com justificativa por componente e validade até **2027-02-28** (ferramentas auxiliares não usadas pela aplicação) | 0 HIGH/CRITICAL |
+| `phpmyadmin` | 12 Debian + 12 Composer | Imagem existe apenas no `docker-compose.dev.yml`; não é publicada em produção e saiu do gate de CI (o override continua validado no job de Compose) | 24 achados na imagem de desenvolvimento, fora do pipeline de produção |
+
+Também foram alinhados os scans aos mesmos digests usados no deploy: a matriz do CI não usa mais tags soltas, e `scripts/pin-images.sh` atualiza `Dockerfile`, `docker/nginx.Dockerfile`, `docker-compose.yml`, `docker-compose.dev.yml` e `.github/workflows/ci.yml`.
+
+Pendências relacionadas: rebuild multi-stage da imagem da aplicação (P2-01/P2-02), atualização do digest/versão do MySQL quando a Oracle corrigir `mysqlsh`/`gosu` e revisão das exceções antes do vencimento em 2027-02-28.
 
 ---
 

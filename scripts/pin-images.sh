@@ -31,18 +31,18 @@ esac
 
 command -v docker >/dev/null || { echo "erro: docker nao encontrado no PATH" >&2; exit 1; }
 
-# imagem -> arquivo onde ela e referenciada
+# imagem -> arquivos onde ela e referenciada (todos sao atualizados)
 IMAGENS=(
     "php:8.5-apache Dockerfile"
     "composer:2 Dockerfile"
-    "nginx:stable-alpine docker-compose.yml"
-    "mysql:8.4 docker-compose.yml"
+    "nginx:stable-alpine docker/nginx.Dockerfile"
+    "mysql:8.4 docker-compose.yml .github/workflows/ci.yml"
     "phpmyadmin:5.2 docker-compose.dev.yml"
 )
 
 changed=0
 for entrada in "${IMAGENS[@]}"; do
-    read -r image file <<< "$entrada"
+    read -r image files <<< "$entrada"
     escaped=${image//./\\.}
 
     digest=$(docker buildx imagetools inspect "$image" --format '{{json .Manifest.Digest}}' | tr -d '"')
@@ -51,30 +51,32 @@ for entrada in "${IMAGENS[@]}"; do
         continue
     fi
 
-    previous=$(grep -oE "${escaped}@sha256:[0-9a-f]{64}" "$file" | head -1 || true)
+    for file in $files; do
+        previous=$(grep -oE "${escaped}@sha256:[0-9a-f]{64}" "$file" | head -1 || true)
 
-    # Aceita imagem com ou sem digest e reescreve sempre com o digest atual.
-    tmp=$(mktemp)
-    sed -E \
-        "s|^([[:space:]]*(image:[[:space:]]*)?${escaped})[[:space:]]*(@sha256:[0-9a-f]{64})?|\1@${digest}|g" \
-        "$file" > "$tmp"
+        # Substitui apenas referencias ja fixadas por digest, em qualquer
+        # posicao: FROM ..., image: ..., ARG ...=... e variaveis do CI.
+        # Nao mexe em textos como "phpmyadmin:5.2)" no nome de um job.
+        tmp=$(mktemp)
+        sed -E "s|${escaped}@sha256:[0-9a-f]{64}|${image}@${digest}|g" "$file" > "$tmp"
 
-    if diff -q "$file" "$tmp" >/dev/null; then
-        echo "ok        $image = ${digest}"
+        if diff -q "$file" "$tmp" >/dev/null; then
+            echo "ok        $file: $image = ${digest}"
+            rm -f "$tmp"
+            continue
+        fi
+
+        changed=$((changed + 1))
+        echo "atualiza  $file: ${previous:-<sem digest>} -> ${digest}"
+        if [ "$APPLY" -eq 1 ]; then
+            cat "$tmp" > "$file"
+            echo "         aplicado"
+        else
+            echo "         previa:"
+            diff -u "$file" "$tmp" | sed 's/^/         /' || true
+        fi
         rm -f "$tmp"
-        continue
-    fi
-
-    changed=$((changed + 1))
-    echo "atualiza  $file: ${previous:-<sem digest>} -> ${digest}"
-    if [ "$APPLY" -eq 1 ]; then
-        cat "$tmp" > "$file"
-        echo "         aplicado"
-    else
-        echo "         previa:"
-        diff -u "$file" "$tmp" | sed 's/^/         /' || true
-    fi
-    rm -f "$tmp"
+    done
 done
 
 if [ "$changed" -gt 0 ] && [ "$APPLY" -eq 0 ]; then
