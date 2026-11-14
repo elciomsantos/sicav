@@ -44,12 +44,17 @@ navegador ──HTTP──▶ nginx ──▶ app (Apache + PHP 8.5) ──▶ d
                      publicada
 ```
 
-- **nginx** (`nginx:stable-alpine`): reverse proxy e **única porta publicada**
-  no host (`NGINX_PORT`, padrão 8000). Config em `deploy/nginx/default.conf`.
+- **nginx** (`nginx:stable-alpine`, fixado por digest): reverse proxy e
+  **única porta publicada** no host (`NGINX_PORT`, padrão 8000). Config em
+  `deploy/nginx/default.conf`. Gera um `X-Request-ID` por requisição e o
+  encaminha ao app; o log de acesso começa com esse ID.
 - **app** (imagem construída do `Dockerfile`): Apache + PHP 8.5, roda como
   UID 1000 e não publica portas — acessado apenas pelo nginx na rede
   `frontend`. Container endurecido: `cap_drop: ALL`, `read_only` com tmpfs,
-  `no-new-privileges` e limites de memória/CPU/pids.
+  `no-new-privileges` e limites de memória/CPU/pids. O `mod_remoteip`
+  converte o `X-Forwarded-For` do nginx no IP real do cliente em
+  `REMOTE_ADDR` (rate limiting e auditoria usam esse valor); a conf dos
+  proxies internos é gerada por `docker/entrypoint.sh` no boot.
 - **db** (`mysql:8.4`): fica apenas na rede `backend` marcada `internal: true`
   — sem porta no host e sem saída para a internet. Acesso administrativo
   apenas via `docker compose exec db mysql -u root -p`.
@@ -88,7 +93,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```
 
 O script gera o `.env` a partir de `.env.example.docker` (com
-`APP_ENV=development` e senhas fracas de exemplo) — **não use em
+`APP_ENV=development` e senhas de exemplo a trocar) — **não use em
 produção**. No servidor, siga o runbook abaixo com segredos fortes.
 
 ### Produção (Ubuntu Server 26.04 LTS)
@@ -192,7 +197,7 @@ sudo ufw enable    # se o firewall ainda não estiver ativo
 docker compose ps
 ```
 
-Acesse em `http://<IP-do-servidor>:8000`.
+Acesse em `http://10.10.10.208:8000`.
 
 > **HTTP sem TLS:** a stack serve HTTP puro, adequado para rede interna
 > isolada. Cookies de sessão só recebem a flag `Secure` quando o acesso é
@@ -206,8 +211,13 @@ Acesse em `http://<IP-do-servidor>:8000`.
 > Não há `container_name` fixo: os containers/redes recebem o prefixo do projeto.
 > Evite portas já em uso (`sudo ss -ltnp`).
 
-> O nginx repassa `Host`, `X-Real-IP`, `X-Forwarded-For` e `X-Forwarded-Proto`
-> ao PHP. Logs de acesso/erro aparecem em `docker compose logs nginx`.
+> O nginx repassa `Host`, `X-Real-IP`, `X-Forwarded-For`, `X-Forwarded-Proto`
+> e `X-Request-ID` ao PHP. O `X-Forwarded-For` só vira IP real do cliente
+> porque o Apache declara as redes Docker como proxies internos
+> (`RemoteIPInternalProxy`, conf em `/etc/visitantes/remoteip/remoteip.conf`
+> dentro do container). O log de acesso do nginx começa com o `request_id`,
+> o mesmo valor usado pelo evento de auditoria do PHP — dá para cruzar
+> `docker compose logs nginx` com o `AUDIT` de `docker compose logs app`.
 
 #### 5. Verificação pós-deploy
 
@@ -340,6 +350,8 @@ PRs e versionamento está em [docs/FLUXO-GIT.md](docs/FLUXO-GIT.md).
 | `bind: address already in use` na subida | Outro serviço usando a porta | `sudo ss -ltnp \| grep 8000`; troque `NGINX_PORT` no `.env` |
 | nginx responde `502 Bad Gateway` | Container `app` parado ou reiniciando em loop | `docker compose ps`, `docker compose logs app` |
 | Login falha para usuário válido | Banco restaurado sem dados / schema ausente | `docker compose logs app` (procure `Migration completed`); confira com `docker compose exec db mysql -u root -p visitorpass` |
+| Rate limiting bloqueia todo mundo / auditoria sempre com o mesmo IP | O `mod_remoteip` não carregou a conf (tmpfs ausente no `app`) | `docker compose exec app cat /etc/visitantes/remoteip/remoteip.conf`; se o arquivo não existir, confira o `tmpfs` do serviço `app` no compose e o `IncludeOptional` em `docker/apache.conf` |
+| `request_id` do nginx não bate com o do `AUDIT` do PHP | Requisição não passou pelo proxy (acesso direto ao app) | Compare as duas linhas pelo horário; o app só converge o `X-Request-ID` quando a requisição entra pelo nginx |
 
 Logs de qualquer serviço: `docker compose logs [-f] [app\|nginx\|db]`.
 
@@ -418,6 +430,22 @@ Variáveis lidas pelo `docker-compose.yml` a partir do `.env` (não commitado):
 | `VISITORPASS_SESSION_ABSOLUTE_LIFETIME` | `43200` | Vida máxima absoluta da sessão (segundos) |
 | `PMA_PORT` | `8081` | Porta do phpMyAdmin — **apenas no override de desenvolvimento** |
 
+Sem `VISITORPASS_DB_PASS` e `MYSQL_ROOT_PASSWORD` o `docker compose` **falha
+de propósito** (`${VAR:?...}`): não existe mais fallback de credencial de
+desenvolvimento no compose. Em desenvolvimento, `.env.example.docker` já traz
+valores de exemplo para as duas.
+
+As imagens (`php`, `composer`, `nginx`, `mysql`, `phpmyadmin`) são fixadas por
+digest `sha256` — a tag pode ser movida silenciosamente pelo registro, e o
+digest garante que o build use sempre o artefato testado. Para atualizar:
+
+```bash
+./scripts/pin-images.sh          # mostra o que mudaria, sem alterar
+./scripts/pin-images.sh --apply  # aplica nos arquivos
+```
+
+O Dependabot também abre PR de atualização da imagem do Compose.
+
 ## Qualidade e CI
 
 Os checks rodam no GitHub Actions a cada push em `main` e em
@@ -431,7 +459,8 @@ Os checks rodam no GitHub Actions a cada push em `main` e em
 | `ci.yml` — Compose | `docker compose config` de produção (dados em `/mnt/visitantes`) e do override de desenvolvimento |
 | `ci.yml` — Lint | ShellCheck em `scripts/*.sh`/`docker/*.sh` e Hadolint no `Dockerfile` |
 | `ci.yml` — Cobertura | PHPUnit com PCOV e upload do `clover.xml` como artifact |
-| `ci.yml` — Smoke | Build e subida de `db + app + nginx` (dados em dirs temporários do runner), espera o banco ficar `healthy` e valida HTTP na porta 8000 |
+| `ci.yml` — Smoke | Build e subida de `db + app + nginx` (dados em dirs temporários do runner), espera o banco ficar `healthy`, valida HTTP na porta 8000 e confere que o `X-Request-ID` do nginx aparece no evento de auditoria do PHP com o mesmo IP de cliente |
+| `ci.yml` — Scan (Trivy) | Scanner de vulnerabilidades nas imagens (`app`, `nginx`, `mysql`, `phpmyadmin`) falhando em `HIGH`/`CRITICAL` (`--ignore-unfixed`) |
 | `codeql.yml` | Code scanning: CodeQL para JavaScript/TypeScript e GitHub Actions; PHPStan (SARIF) e Psalm taint analysis (SARIF) para PHP — o CodeQL não oferece mais análise de PHP |
 | `release.yml` | Cria a release no GitHub para cada tag `v*.*.*` |
 | `dependency-review.yml` | Revisão de dependências em PRs (falha em severidade `high`) |
@@ -482,6 +511,35 @@ O login agora redireciona diretamente para a página inicial após autenticaçã
 
 Adicionado Psalm taint analysis (SAST) ao CI, que apontou um XSS refletido nos
 filtros do relatório de visitas; a saída passou a ser escapada no servidor.
+
+### Endurecimento de proxy, imagens e credenciais (2026-11-13)
+
+Cinco pendências de infraestrutura documentadas em
+[docs/PLANO_IMPLEMENTACAO.md](docs/PLANO_IMPLEMENTACAO.md) foram fechadas:
+
+- **IP real do cliente atrás do nginx:** `mod_remoteip` habilitado no
+  `Dockerfile`, com `RemoteIPHeader X-Forwarded-For` e
+  `RemoteIPInternalProxy` apontando para as redes Docker — que o
+  `docker/entrypoint.sh` detecta em `/proc/net/route` no boot e grava no
+  tmpfs `/etc/visitantes/remoteip/`. Antes o rate limiting e a auditoria
+  viam todos os clientes como um só (o IP do container nginx). `getClientIp()`
+  passou a ler apenas `REMOTE_ADDR` — header de proxy vindo do cliente nunca é
+  usado para decidir o IP.
+- **`X-Request-ID` de ponta a ponta:** o nginx passa a gerar o ID
+  (`$request_id`) e encaminhá-lo ao PHP; `getRequestId()` reutiliza o valor
+  (validado por padrão) em vez de gerar outro localmente. O log de acesso do
+  nginx começa com o ID, cruzando com o `AUDIT` do PHP.
+- **Imagens fixadas por digest:** `php`, `composer`, `nginx`, `mysql` e
+  `phpmyadmin` saíram de tags soltas para `imagem:tag@sha256:...`. A manutenção
+  fica em `./scripts/pin-images.sh`.
+- **Credenciais obrigatórias:** `VISITORPASS_DB_PASS` e `MYSQL_ROOT_PASSWORD`
+  não têm mais fallback no `docker-compose.yml` — sem eles o `docker compose`
+  interrompe com mensagem explícita (inclusive no `healthcheck` do banco).
+- **Scanner de imagem no CI:** job Trivy em `ci.yml` falha em vulnerabilidades
+  `HIGH`/`CRITICAL` (`--ignore-unfixed`) para a imagem do app e para as
+  imagens base. O smoke teste da stack ainda passou a validar a propagação do
+  `request_id` e a igualdade do IP entre o que o nginx vê e o que o PHP
+  registra.
 
 ## Estrutura do projeto
 

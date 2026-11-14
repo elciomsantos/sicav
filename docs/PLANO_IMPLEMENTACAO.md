@@ -48,6 +48,11 @@ Os achados abaixo são as lacunas **confirmadas** entre a especificação e o es
 | SEC-MFA-001 | Autenticação | Alto | Alta | 5 | Confirmado | Removido |
 | SEC-HDR-001 | Configuração | Médio | Média | 2 | Confirmado | Validado |
 | SEC-LOG-001 | Logs | Médio | Média | 2 | Confirmado | Validado |
+| SEC-PROXY-001 | Infraestrutura | Alto | Alta | 2 | Confirmado | Validado |
+| SEC-PROXY-002 | Infraestrutura | Médio | Média | 1 | Confirmado | Validado |
+| SEC-DOCKER-010 | Docker | Médio | Média | 1 | Confirmado | Validado |
+| SEC-DOCKER-011 | Docker | Alto | Alta | 1 | Confirmado | Validado |
+| SEC-CI-001 | CI/CD | Alto | Alta | 1 | Confirmado | Validado |
 | QUAL-BUG-001 | Backend | Alto | Alta | 1 | Confirmado | Validado |
 
 ---
@@ -228,9 +233,9 @@ Os achados abaixo são as lacunas **confirmadas** entre a especificação e o es
 - **Status:** Validado. A tabela `rate_limits` e o helper `inc/rate_limit.php`
   aplicam janela deslizante por IP+rota em `get_photo`, exportações, cadastro
   de visitante e rotas administrativas POST; violações geram
-  `RATE_LIMIT_TRIGGERED` na auditoria. **Ressalva:** atrás do nginx,
-  `getClientIp()` usa apenas `REMOTE_ADDR`; sem `mod_remoteip`/validação dos
-  headers do proxy, todos os clientes podem ser contabilizados com o IP do
+  `RATE_LIMIT_TRIGGERED` na auditoria. A ressalva de IP do proxy ficou
+  resolvida com SEC-PROXY-001 (`mod_remoteip` + `getClientIp()` lendo
+  `REMOTE_ADDR`): o IP usado passa a ser o do cliente, não o do container
   nginx.
 
 ---
@@ -279,8 +284,9 @@ Os achados abaixo são as lacunas **confirmadas** entre a especificação e o es
 - **Implementação recomendada:** Criar helper `logEvent(string $event, array $context)` que emite JSON para `php://stderr` (capturado pelo Docker) incluindo `request_id` (gerado por request), `user_id`, `ip`, `timestamp`. Aplicar nos eventos listados em §49. Nunca logar senha/token/MFA.
 - **Status:** Validado. `inc/log_event.php` fornece `getRequestId()` e
   `logEvent()` com saída JSON para o stderr, aplicado a login, logout, sessão,
-  autorização, rate limit e auditoria. **Ressalva:** o `request_id` é gerado no
-  PHP; o nginx ainda não gera nem repassa `X-Request-ID`.
+  autorização, rate limit e auditoria. A ressalva de correlação ficou
+  resolvida com SEC-PROXY-002: o nginx gera o `X-Request-ID` e o PHP o
+  reutiliza (validado), e o log de acesso do nginx também passa a exibi-lo.
 
 ---
 
@@ -294,6 +300,112 @@ Os achados abaixo são as lacunas **confirmadas** entre a especificação e o es
 - **Implementação recomendada:** Usar `$db->insert($sql, $params)` e manter a checagem `$result['status'] !== 'success'`.
 - **Testes:** Cadastrar visitante via API; validar que a resposta contém `id` numérico e o registro no banco. Adicionar teste de integração.
 - **Status:** Validado. `api/api_cadastro_visitante.php:153` agora usa `$db->insert($sql, $params)`, mantendo a checagem `$result['status'] !== 'success'` e retornando `id` numérico. `php -l` OK; baseline atual com 153 testes passando.
+
+---
+
+### SEC-PROXY-001 — IP real do cliente perdido atrás do proxy
+
+- **Problema:** `getClientIp()` (`inc/security.php`) usava apenas
+  `$_SERVER['REMOTE_ADDR']`. Atrás do nginx, esse valor é o IP do container
+  proxy, então o rate limiting por IP e o IP registrado na auditoria viam
+  todos os clientes como um só.
+- **Localização:** `inc/security.php`, `inc/log_event.php`,
+  `docker/apache.conf`, `docker/entrypoint.sh`, `Dockerfile`.
+- **Causa raiz:** o Apache não tinha `mod_remoteip` e o app não validava
+  header de proxy (correto: validar header sozinho seria pior).
+- **Implementação:** `a2enmod remoteip` no `Dockerfile`; `docker/entrypoint.sh`
+  detecta no boot as sub-redes Docker do container (`/proc/net/route`) e grava
+  `/etc/visitantes/remoteip/remoteip.conf` no tmpfs montado em
+  `/etc/visitantes/remoteip`; o vhost carrega o arquivo por
+  `IncludeOptional`; a diretiva é `RemoteIPInternalProxy` com
+  `RemoteIPHeader X-Forwarded-For` — `Internal` é obrigatório porque o cliente
+  da rede interna tem IP privado (RFC1918), que o `mod_remoteip` descarta
+  quando apresentado por proxy "externo" (verificado em teste controlado e
+  com `LogLevel remoteip:debug`). `getClientIp()` continua lendo apenas
+  `REMOTE_ADDR`, agora corrigido pelo Apache.
+- **Testes:** stack local `docker compose up -d` com `ping` pelo IP da LAN →
+  o evento `AUDIT` registra o IP do cliente (ex.: `172.30.178.209`), não o do
+  container nginx; `tests/ProxyIpTest.php` cobre `getClientIp()` ignorando
+  `X-Forwarded-For`/`X-Real-IP`; o smoke do CI compara o `$remote_addr` do
+  nginx com o IP do evento do PHP.
+- **Ressalva:** quando o cliente é o próprio host via porta publicada
+  (`http://127.0.0.1:8000`), o docker-proxy reescreve a origem para o gateway
+  da bridge — o IP correto aparece quando o cliente vem de outra máquina
+  (cenário de produção `10.10.10.208:8000`).
+- **Status:** Validado.
+
+---
+
+### SEC-PROXY-002 — `request_id` não propagado pelo proxy
+
+- **Problema:** o `request_id` era gerado só no PHP; não havia como correlar
+  a linha de acesso do nginx com o evento de auditoria.
+- **Localização:** `deploy/nginx/default.conf`, `inc/log_event.php`.
+- **Implementação:** nginx passa a definir `proxy_set_header X-Request-ID
+  $request_id;` (valor gerado pelo próprio nginx — um `X-Request-ID` enviado
+  pelo cliente é ignorado) e o `log_format visitantes` inicia a linha com o
+  ID. `normalizeRequestId()` valida o header contra
+  `^[A-Za-z0-9._-]{8,128}$` e só reutiliza o valor do proxy quando válido;
+  caso contrário gera `bin2hex(random_bytes(16))`. `logEvent()` passou a usar
+  `getClientIp()` em vez de `$_SERVER['REMOTE_ADDR']`.
+- **Testes:** `tests/ProxyIpTest.php` (dados de teste para ID válido,
+  inválido, limites de tamanho) e o smoke do CI, que compara o
+  `request_id` do nginx com o do último evento `AUDIT`.
+- **Status:** Validado.
+
+---
+
+### SEC-DOCKER-010 — Imagens sem pinagem
+
+- **Problema:** `nginx:stable-alpine`, `composer:2`, `php:8.5-apache` e
+  `mysql:8.4` usavam tags móveis; um `docker compose pull` poderia trocar a
+  imagem sem qualquer sinal, e o scanner (quando existisse) não teria
+  artefato estável para avaliar.
+- **Localização:** `Dockerfile`, `docker-compose.yml`,
+  `docker-compose.dev.yml`.
+- **Implementação:** todas fixadas por digest (`imagem:tag@sha256:...`), com
+  `scripts/pin-images.sh` (modo dry-run e `--apply`) para atualizar os
+  digests via `docker buildx imagetools`.
+- **Testes:** `./scripts/pin-images.sh` em dry-run confirma que os digests dos
+  arquivos correspondem aos do registro; validação pontual aplicando em cópia
+  sem digest e reaplicando.
+- **Status:** Validado.
+
+---
+
+### SEC-DOCKER-011 — Credenciais com fallback de desenvolvimento
+
+- **Problema:** `${VISITORPASS_DB_PASS:-visitorpassword}` e
+  `${MYSQL_ROOT_PASSWORD:-rootpassword}` permitiam subir produção sem definir
+  senha; o `healthcheck` do banco repetia o fallback.
+- **Localização:** `docker-compose.yml`, `.env.example.docker`,
+  `.env.example`, `scripts/setup_docker.sh`.
+- **Implementação:** as duas variáveis passaram a ser obrigatórias
+  (`${VAR:?...}`), inclusive no `healthcheck`; os arquivos de exemplo trazem
+  apenas placeholders; `setup_docker.sh` passou a ler as credenciais do
+  `.env` (antes lia o ambiente do shell, que não via o arquivo) e usa
+  `MYSQL_PWD` em vez de `-p` na linha de comando. O job `compose` do CI falha
+  se alguém reintroduzir `:-visitorpassword`/`:-rootpassword`.
+- **Testes:** `docker compose --env-file /dev/null config` falha com mensagem
+  explícita sem as variáveis e passa com elas; stack local completa (banco
+  healthy, migração, login respondendo 302) usando senhas reais.
+- **Status:** Validado.
+
+---
+
+### SEC-CI-001 — CI sem scanner de imagem
+
+- **Problema:** nenhum job analisava vulnerabilidades das imagens Docker.
+- **Localização:** `.github/workflows/ci.yml`.
+- **Implementação:** `scan-app` constrói a imagem do app e roda Trivy; e
+  `scan-base` roda Trivy em `nginx:stable-alpine`, `mysql:8.4` e
+  `phpmyadmin:5.2`. Ambos usam `--severity HIGH,CRITICAL --ignore-unfixed` e
+  `exit-code: 1`.
+- **Ressalva:** `--ignore-unfixed` evita falso positivo em CVE sem correção
+  disponível na distribuição, o que significa que apenas vulnerabilidades com
+  correção bloqueiam o build — o critério é cobertura, não ausência total de
+  achados.
+- **Status:** Validado.
 
 ---
 
@@ -323,6 +435,13 @@ Os achados abaixo são as lacunas **confirmadas** entre a especificação e o es
 ### Fase 3 — Validação e Testes de Segurança
 - Executar testes obrigatórios da especificação (§62): autenticação (brute force, session fixation), autorização (IDOR/BOLA), web (SQLi, XSS, CSRF, path traversal), arquivos (upload inválido, executável, download sem autorização), container (usuário, capabilities, ports).
 - Adicionar testes automatizados para login, sessão, upload e autorização.
+
+### Fase 4 — Infraestrutura, proxy e CI
+- ~~SEC-PROXY-001: IP real do cliente atrás do nginx (`mod_remoteip` + `getClientIp()`).~~ Validado — registro de execução abaixo.
+- ~~SEC-PROXY-002: `X-Request-ID` propagado pelo nginx e reutilizado no PHP.~~ Validado.
+- ~~SEC-DOCKER-010: imagens fixadas por digest.~~ Validado.
+- ~~SEC-DOCKER-011: credenciais obrigatórias no Compose.~~ Validado.
+- ~~SEC-CI-001: scanner de imagem (Trivy) no CI.~~ Validado.
 
 ---
 
@@ -438,6 +557,34 @@ Validação da suíte: `vendor/bin/phpunit` → 121 testes, 148 asserções OK.
 
 Validação: `vendor/bin/phpunit` → 153 testes, 240 asserções OK; E2E de upload (com e sem foto) validado após o rebuild.
 
+### Fase 4 — Infraestrutura, proxy e CI (2026-11-13)
+
+| ID | Correção | Validação |
+|---|---|---|
+| SEC-PROXY-001 | `mod_remoteip` no Dockerfile; conf dos proxies internos gerada no boot (`docker/entrypoint.sh` + tmpfs); vhost com `IncludeOptional`; `getClientIp()` só lê `REMOTE_ADDR` | Stack local com `curl` pelo IP da LAN → `AUDIT` com o IP do cliente (`172.30.178.209`), não o do nginx; `docker compose logs nginx` também passa a exibir o IP real |
+| SEC-PROXY-002 | nginx gera e encaminha `X-Request-ID`; log de acesso com o ID; `normalizeRequestId()` valida o header e gera fallback local | Stack local: `request_id` idêntico na linha do nginx e no `AUDIT` do PHP; smoke do CI faz a mesma comparação |
+| SEC-DOCKER-010 | Digests fixados em 5 imagens; `scripts/pin-images.sh` para manutenção | `./scripts/pin-images.sh` em dry-run confirma digests; Hadolint/`docker compose config` OK |
+| SEC-DOCKER-011 | `VISITORPASS_DB_PASS` e `MYSQL_ROOT_PASSWORD` obrigatórios (compose e healthcheck); exemplos com placeholder; `setup_docker.sh` lê o `.env` | `docker compose config` falha sem as variáveis e passa com elas; stack local completa (banco healthy, migração, HTTP 302) |
+| SEC-CI-001 | Jobs Trivy para a imagem do app e para as imagens base (`HIGH`/`CRITICAL`, `--ignore-unfixed`) | Workflow validado com parser YAML; execução real fica para o CI do PR |
+
+Correções adicionais encontradas durante a validação:
+
+- **`RemoteIPInternalProxy` em vez de `RemoteIPTrustedProxy`:** o cliente da
+  rede interna tem IP privado (RFC1918). Com `RemoteIPTrustedProxy` o
+  `mod_remoteip` descarta o valor do header ("appears to be a private IP or
+  nonsensical" — confirmado com `LogLevel remoteip:debug`). A diretiva interna
+  é que faz o IP real chegar a `REMOTE_ADDR`.
+- **`${ENV}` não é expandido em `RemoteIPTrustedProxy`:** a sub-rede não pode
+  ser passada por variável de ambiente; ela é detectada em `/proc/net/route`
+  no boot e escrita em arquivo incluído pelo vhost.
+- **`apachectl -M` e `docker cp` em container `read_only`:** não servem para
+  inspecionar a imagem final; a depuração foi feita com `apache2 -t -D
+  DUMP_MODULES` (após `. /etc/apache2/envvars`) e com arquivo de teste
+  gravado no tmpfs.
+
+Validação da suíte: `vendor/bin/phpunit` → 167 testes, 256 asserções OK;
+`vendor/bin/phpstan analyse` sem erros; ShellCheck e Hadolint OK.
+
 ---
 
 ## 5. Definition of Done
@@ -458,14 +605,19 @@ Para cada achado, antes de declarar concluído:
 
 ## 6. Limitações
 
-- Ambiente de produção não acessível; validação limitada ao Docker local.
+- Ambiente de produção não acessível; validação limitada ao Docker local
+  (stack separada em `10.10.10.208`-equivalente, com projeto/porta/dados
+  próprios, sem tocar na stack `visitantes` já em execução).
 - MFA (SEC-MFA-001): **removido do sistema em 2026-08-20**; não há TOTP,
   recovery codes nem `VISITORPASS_MFA_KEY` no código atual. A exigência da §12
   permanece como decisão de política/escopo do produto.
 - TLS/HSTS (SEC-HDR-001) dependem do reverse proxy em produção (fora do repositório); HSTS é emitido pelo app quando a requisição é HTTPS.
-- IP real atrás do proxy: `getClientIp()` usa `REMOTE_ADDR` e o Apache não usa `mod_remoteip`; rate limiting por IP e IP de auditoria podem registrar o IP do nginx.
-- `request_id` não é propagado pelo nginx (`X-Request-ID`); a correlação usa apenas o ID gerado no PHP.
-- Imagens `nginx:stable-alpine` e `composer:2` usam tags de linha; fixar patch/digest é melhoria pendente.
-- `docker-compose.yml` mantém fallbacks de credenciais de desenvolvimento; em produção, senhas fortes devem ser definidas no `.env`.
-- O CI não executa scanner de imagem (Trivy/Grype/Docker Scout).
+- O acesso em produção é HTTP na rede interna (`http://10.10.10.208:8000`);
+  sem TLS o cookie de sessão não recebe a flag `Secure` (ver §9/§21).
+- Quando o cliente é o próprio host pela porta publicada do Docker
+  (`http://127.0.0.1:8000`), o docker-proxy reescreve a origem para o gateway
+  da bridge — o IP real aparece quando o cliente vem de outra máquina. A
+  validação do CI por isso compara nginx x PHP em vez de fixar um valor.
+- O scanner de imagem do CI (SEC-CI-001) usa `--ignore-unfixed`: só bloqueia
+  vulnerabilidades `HIGH`/`CRITICAL` com correção disponível.
 - Análise de performance e testes E2E não executados nesta etapa (registrados como "Não auditado").
