@@ -1,4 +1,38 @@
+<div align="center">
+  <img src="/public/imagens/corporativo.png" alt="Logo" width="400">
+
+  <h1>Sistema de Gerenciamento e Controle de Visitantes</h1>
+
+  <p align="center">
+
+ 
+
+  </p>
+</div>
+
 # Sistema de Visitantes (SICAV)
+
+# SICAV
+**Sistema de Gerenciamento e Controle de Visitantes**
+
+O SICAV é um sistema desenvolvido para modernizar, organizar e aumentar a segurança no processo de gerenciamento e controle de visitantes em instituições, empresas e órgãos públicos.
+
+A plataforma permite realizar o cadastro e a identificação de visitantes, registrar entradas e saídas, controlar o fluxo de pessoas e manter um histórico detalhado das visitas realizadas.
+
+Com uma interface intuitiva e recursos voltados à segurança da informação, o SICAV proporciona maior eficiência administrativa, rastreabilidade e confiabilidade no controle de acesso às dependências institucionais.
+
+**Principais funcionalidades:**
+- Cadastro e identificação de visitantes.
+- Registro de entrada e saída.
+- Controle e acompanhamento de acessos.
+- Consulta ao histórico de visitas.
+- Emissão de relatórios gerenciais.
+- Armazenamento organizado das informações.
+- Maior controle e rastreabilidade das movimentações.
+
+**Objetivo:** proporcionar um ambiente mais seguro, organizado e eficiente por meio da gestão informatizada de visitantes.
+
+**Slogan:** Segurança, organização e controle de acesso.
 
 Sistema web para controle de entrada e saída de visitantes com geração de
 crachás, relatórios e auditoria.
@@ -55,9 +89,10 @@ navegador ──HTTP──▶ nginx ──▶ app (Apache + PHP 8.5) ──▶ d
   converte o `X-Forwarded-For` do nginx no IP real do cliente em
   `REMOTE_ADDR` (rate limiting e auditoria usam esse valor); a conf dos
   proxies internos é gerada por `docker/entrypoint.sh` no boot.
-- **db** (`mysql:8.4`): fica apenas na rede `backend` marcada `internal: true`
-  — sem porta no host e sem saída para a internet. Acesso administrativo
-  apenas via `docker compose exec db mysql -u root -p`.
+- **db** (imagem derivada de `mysql:8.4`, fixada por digest): o build atualiza
+  os pacotes do Oracle Linux; o serviço fica apenas na rede `backend` marcada
+  `internal: true` — sem porta no host e sem saída para a internet. Acesso
+  administrativo apenas via `docker compose exec db mysql -u root -p`.
 - **Dados persistentes**: bind mounts no drive dedicado `/mnt/visitantes`
   (`mysql/` para o banco, `fotos/` para as fotos). Não há volumes nomeados
   do Docker — backup é dump do banco + cópia dessas pastas.
@@ -460,7 +495,7 @@ Os checks rodam no GitHub Actions a cada push em `main` e em
 | `ci.yml` — Lint | ShellCheck em `scripts/*.sh`/`docker/*.sh` e Hadolint no `Dockerfile` |
 | `ci.yml` — Cobertura | PHPUnit com PCOV e upload do `clover.xml` como artifact |
 | `ci.yml` — Smoke | Build e subida de `db + app + nginx` (dados em dirs temporários do runner), espera o banco ficar `healthy`, valida HTTP na porta 8000 e confere que o `X-Request-ID` do nginx aparece no evento de auditoria do PHP com o mesmo IP de cliente |
-| `ci.yml` — Scan (Trivy) | Scanner de vulnerabilidades nas imagens (`app`, `nginx`, `mysql`, `phpmyadmin`) falhando em `HIGH`/`CRITICAL` (`--ignore-unfixed`) |
+| `ci.yml` — Scan (Trivy) | Scanner de vulnerabilidades nas imagens de produção (`app`, `nginx` e MySQL atualizado no build), falhando em `HIGH`/`CRITICAL` (`--ignore-unfixed`) |
 | `codeql.yml` | Code scanning: CodeQL para JavaScript/TypeScript e GitHub Actions; PHPStan (SARIF) e Psalm taint analysis (SARIF) para PHP — o CodeQL não oferece mais análise de PHP |
 | `release.yml` | Cria a release no GitHub para cada tag `v*.*.*` |
 | `dependency-review.yml` | Revisão de dependências em PRs (falha em severidade `high`) |

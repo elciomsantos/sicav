@@ -1,6 +1,5 @@
 #!/bin/bash
-# Atualiza os digests (sha256) fixados no Dockerfile, no docker-compose.yml e no
-# docker-compose.dev.yml.
+# Atualiza os digests (sha256) fixados nos Dockerfiles e arquivos Compose.
 #
 # Por que fixar digest: a tag pode ser movida silenciosamente pelo registro e
 # o "docker compose up" puxaria outra imagem sem qualquer aviso. Com o digest,
@@ -36,7 +35,7 @@ IMAGENS=(
     "php:8.5-apache Dockerfile"
     "composer:2 Dockerfile"
     "nginx:stable-alpine docker/nginx.Dockerfile"
-    "mysql:8.4 docker-compose.yml .github/workflows/ci.yml"
+    "mysql:8.4 docker/mysql.Dockerfile"
     "phpmyadmin:5.2 docker-compose.dev.yml"
 )
 

@@ -2,7 +2,7 @@
 # Para atualizar: ./scripts/pin-images.sh
 FROM composer:2@sha256:ca11f643d7791ebdd90a34fc20caf11380d434007ae539a9ea75cd9212e13dca AS composer
 
-FROM php:8.5-apache@sha256:08af36df144462d84c7f16190557eec06cb9f656882685610b712a15eec54d46
+FROM php:8.5-apache@sha256:0110f2cd5f4d58417afc7340b22c4ddcce54e970b87c03a6c77259b07b47c325
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 

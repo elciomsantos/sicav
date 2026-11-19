@@ -98,6 +98,17 @@ Também foram alinhados os scans aos mesmos digests usados no deploy: a matriz d
 
 Pendências relacionadas: rebuild multi-stage da imagem da aplicação (P2-01/P2-02), atualização do digest/versão do MySQL quando a Oracle corrigir `mysqlsh`/`gosu` e revisão das exceções antes do vencimento em 2027-02-28.
 
+### Reincidência do scan (2026-11-19)
+
+Uma atualização do banco de vulnerabilidades identificou nginx desatualizado,
+pacotes Oracle Linux 9.8 corrigidos na versão 9.9 e uma nova CVE da biblioteca
+Go embutida no `gosu`. O digest do nginx foi atualizado; o MySQL agora é
+construído de `docker/mysql.Dockerfile`, que aplica `microdnf upgrade` sobre a
+imagem oficial fixada. A CVE restante do `gosu` foi adicionada à lista de
+exceções com justificativa específica: o binário de troca de usuário não
+executa servidor HTTP/1 nem chama `net/http MaxBytesReader`. O job Trivy verifica
+essa mesma imagem derivada usada pelo Compose.
+
 ---
 
 ## Ordem sugerida de execução

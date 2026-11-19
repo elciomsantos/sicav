@@ -246,20 +246,20 @@ jobs:
     name: Image scan - mysql (Trivy)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      MYSQL_IMAGE: mysql:8.4@sha256:a81d043930e51745522bd5c430961cf8286f0a23f0a9a2a6e0108f7ea71b0902
     steps:
       - uses: actions/checkout@v7
 
-      - name: Scan mysql for HIGH/CRITICAL vulnerabilities
+      - name: Build MySQL image with Oracle Linux updates
+        run: docker build -f docker/mysql.Dockerfile -t sicav-mysql:scan .
+
+      - name: Scan MySQL for HIGH/CRITICAL vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ${{ env.MYSQL_IMAGE }}
+          image-ref: sicav-mysql:scan
           scan-type: image
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          # Componentes auxiliares da imagem oficial (mysqlsh/gosu) nao usados
-          # pela aplicacao; excecoes justificadas e com validade no arquivo.
+          # Excecoes limitadas a componentes auxiliares nao usados pelo app.
           trivyignores: .trivyignore.yaml
           exit-code: "1"
           format: table

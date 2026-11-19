@@ -1,6 +1,6 @@
 # Excecoes justificadas do scan Trivy para imagens de terceiros.
 #
-# Aplicado somente ao scan da imagem oficial mysql:8.4. O workflow passa este
+# Aplicado somente ao scan da imagem MySQL derivada da imagem oficial 8.4. O workflow passa este
 # arquivo explicitamente (trivyignores: .trivyignore.yaml), pois o formato YAML
 # exige --ignorefile. Cada excecao tem prazo: depois de expired_at o Trivy
 # volta a falhar e a equipe precisa reavaliar (atualizar o digest ou renovar a
@@ -124,4 +124,7 @@ vulnerabilities:
     expired_at: 2027-02-28
   - id: CVE-2026-97031
     statement: gosu apenas troca de usuario; codigo vulneravel fora do caminho de execucao
+    expired_at: 2027-02-28
+  - id: CVE-2026-97054
+    statement: gosu nao executa servidor HTTP/1 nem chama net/http MaxBytesReader
     expired_at: 2027-02-28
