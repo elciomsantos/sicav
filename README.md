@@ -1,4 +1,38 @@
+<div align="center">
+  <img src="/public/imagens/corporativo.png" alt="Logo" width="400">
+
+  <h1>Sistema de Gerenciamento e Controle de Visitantes</h1>
+
+  <p align="center">
+
+ 
+
+  </p>
+</div>
+
 # Sistema de Visitantes (SICAV)
+
+# SICAV
+**Sistema de Gerenciamento e Controle de Visitantes**
+
+O SICAV é um sistema desenvolvido para modernizar, organizar e aumentar a segurança no processo de gerenciamento e controle de visitantes em instituições, empresas e órgãos públicos.
+
+A plataforma permite realizar o cadastro e a identificação de visitantes, registrar entradas e saídas, controlar o fluxo de pessoas e manter um histórico detalhado das visitas realizadas.
+
+Com uma interface intuitiva e recursos voltados à segurança da informação, o SICAV proporciona maior eficiência administrativa, rastreabilidade e confiabilidade no controle de acesso às dependências institucionais.
+
+**Principais funcionalidades:**
+- Cadastro e identificação de visitantes.
+- Registro de entrada e saída.
+- Controle e acompanhamento de acessos.
+- Consulta ao histórico de visitas.
+- Emissão de relatórios gerenciais.
+- Armazenamento organizado das informações.
+- Maior controle e rastreabilidade das movimentações.
+
+**Objetivo:** proporcionar um ambiente mais seguro, organizado e eficiente por meio da gestão informatizada de visitantes.
+
+**Slogan:** Segurança, organização e controle de acesso.
 
 Sistema web para controle de entrada e saída de visitantes com geração de
 crachás, relatórios e auditoria.
