@@ -33,6 +33,9 @@ done
 if [ ! -f .env ]; then
     echo "--> Criando .env a partir de .env.example.docker..."
     cp .env.example.docker .env
+    # O exemplo e seguro por padrao (APP_ENV=production). Este script e
+    # exclusivamente de desenvolvimento, entao forca o modo dev no .env gerado.
+    sed -i 's/^APP_ENV=.*/APP_ENV=development/' .env
 else
     echo "--> .env ja existe, mantendo."
 fi

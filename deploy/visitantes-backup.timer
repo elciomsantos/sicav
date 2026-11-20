@@ -1,0 +1,12 @@
+[Unit]
+Description=SICAV - backup diario as 03:17 (com retencao de 7 dias)
+RequiresMountsFor=/mnt/visitantes
+
+[Timer]
+OnCalendar=*-*-* 03:17:00
+Persistent=true
+RandomizedDelaySec=15m
+Unit=visitantes-backup.service
+
+[Install]
+WantedBy=timers.target

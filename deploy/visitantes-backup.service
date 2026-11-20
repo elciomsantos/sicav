@@ -1,0 +1,12 @@
+[Unit]
+Description=SICAV - backup diario (banco + fotos)
+Documentation=file:/opt/sistema-visitantes/README.md
+RequiresMountsFor=/mnt/visitantes
+AssertPathIsMountPoint=/mnt/visitantes
+After=visitantes.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/sistema-visitantes
+ExecStart=/opt/sistema-visitantes/scripts/backup.sh
+TimeoutStartSec=3600

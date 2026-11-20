@@ -127,9 +127,10 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ./scripts/setup_docker.sh --reset    # recria containers (dados preservados)
 ```
 
-O script gera o `.env` a partir de `.env.example.docker` (com
-`APP_ENV=development` e senhas de exemplo a trocar) — **não use em
-produção**. No servidor, siga o runbook abaixo com segredos fortes.
+O script gera o `.env` a partir de `.env.example.docker` forçando
+`APP_ENV=development` e mantendo senhas de exemplo a trocar — **não use em
+produção** (no servidor o exemplo vem com `APP_ENV=production` e o preflight
+recusa placeholders). No servidor, siga o runbook abaixo com segredos fortes.
 
 ### Produção (Ubuntu Server 26.04 LTS)
 
@@ -206,17 +207,28 @@ vim .env
 # (Opcional: DB_DATA_DIR/FOTOS_DIR no .env mudam onde ficam os dados,
 #  se o drive dedicado estiver montado em outro ponto.)
 
+# Preflight: recusa senha placeholder, APP_ENV != production e drive desmontado
+./scripts/preflight.sh
+
 # Build e inicie (nginx e a unica porta publicada; app e MySQL nao)
-cd /opt/sistema-visitantes
-docker compose up -d --build
+./scripts/deploy.sh
 ```
 
 Os dados persistentes (banco e fotos) ficam no drive dedicado em
 `/mnt/visitantes` (padrão do `docker-compose.yml`).
 
-> Se o drive não estiver montado, o Docker cria `/mnt/visitantes` como pasta
-> comum no disco do sistema e os dados caem no lugar errado — confira com
-> `findmnt /mnt/visitantes` antes de subir a stack.
+> **Guarda de mount:** se o drive não estiver montado, o Docker cria
+> `/mnt/visitantes` como pasta comum no disco do sistema e os dados caem no
+> lugar errado. O `preflight.sh` aborta nesse caso. Para o boot automático,
+> instale as unidades versionadas — o `AssertPathIsMountPoint` falha o serviço
+> se o drive não estiver montado:
+>
+> ```bash
+> sudo cp deploy/visitantes*.service deploy/visitantes-backup.timer /etc/systemd/system/
+> sudo systemctl daemon-reload
+> sudo systemctl enable --now visitantes.service visitantes-backup.timer
+> systemctl status visitantes.service visitantes-backup.timer
+> ```
 
 #### 4. Acesso e firewall
 
@@ -257,7 +269,7 @@ Acesse em `http://10.10.10.208:8000`.
 #### 5. Verificação pós-deploy
 
 ```bash
-# Os três containers devem estar Up (db: healthy)
+# Os três containers devem estar Up (db, app e nginx: healthy)
 docker compose ps
 
 # O app deve responder com redirect para o login (302)
@@ -315,23 +327,38 @@ UPDATE usuarios SET ativo = 0 WHERE usuario IN ('admin', 'supervisor');
 
 O banco fica em `/mnt/visitantes/mysql` e as fotos em
 `/mnt/visitantes/fotos` (drive dedicado). Guarde os backups **fora** desse
-drive (outro disco/servidor).
+drive (outro disco/servidor) — perder o drive não pode custar o banco **e** as
+fotos.
+
+`scripts/backup.sh` faz dump consistente (`--single-transaction`), empacota as
+fotos, gera `SHA256SUMS`, criptografa com GPG (há CPF/telefone/e-mail/fotos no
+conteúdo) e aplica retenção. A senha do banco trafega por arquivo de opções
+`600`, nunca em argumento de linha de comando.
 
 ```bash
-# Banco: dump consistente com a stack rodando (sem downtime)
-docker compose exec db sh -c \
-  'mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" --single-transaction --routines --triggers visitorpass' \
-  > backup-visitorpass-$(date +%F).sql
+# 1. Importe a chave pública do destinatário no keyring de quem roda o timer
+gpg --import chave-publica-backup.asc
 
-# Fotos: cópia do conteúdo do drive dedicado
-sudo rsync -a /mnt/visitantes/fotos/ /outro-disco/backups/fotos/
+# 2. Configure no .env: BACKUP_GPG_RECIPIENT, BACKUP_DIR e (recomendado)
+#    BACKUP_REMOTE para outro host. BACKUP_KEEP_DAYS define a retenção.
+
+# 3. Teste manualmente
+./scripts/backup.sh
+
+# Agendamento (já instalado com as unidades da seção anterior):
+systemctl status visitantes-backup.timer
+systemctl list-timers visitantes-backup.timer
 ```
 
-Exemplo de dump diário no crontab (`crontab -e`), às 2h da manhã:
+Cada execução gera `sicav-backup-<timestamp>.tar.gz` (contém `db.sql.gpg`,
+`fotos.tar.gz.gpg`, `MANIFEST.txt.gpg` e `SHA256SUMS`) e o `.sha256` do
+arquivo. O timer roda diariamente às 03:17 com `Persistent=true` (se o host
+estiver desligado, o backup roda no próximo boot).
 
-```cron
-0 2 * * * cd /opt/sistema-visitantes && docker compose exec db sh -c 'mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" --single-transaction --routines --triggers visitorpass' | gzip > /outro-disco/backups/visitorpass-$(date +\%F).sql.gz
-```
+> **`BACKUP_DIR` continua no mesmo drive por padrão** — isso protege contra
+> erro humano, não contra falha do disco. Configure `BACKUP_REMOTE` (rsync para
+> outro host) para ter uma cópia realmente separada. O script recusa enviar
+> para o remoto sem criptografia.
 
 #### Restauração
 
@@ -339,16 +366,32 @@ Em um host novo (após os passos 1-3 do runbook, com o drive preparado e o
 `.env` configurado):
 
 ```bash
-# 1. Suba a stack — o migrate cria o schema vazio
-docker compose up -d --build
+set -a; . ./.env; set +a   # exporta MYSQL_ROOT_PASSWORD / VISITORPASS_DB_NAME
 
-# 2. Restaure o dump por cima
-docker compose exec -T db sh -c \
-  'mysql -u root -p"$MYSQL_ROOT_PASSWORD" visitorpass' < backup-visitorpass.sql
+# 1. Extraia e verifique o backup (fora do drive de dados)
+mkdir -p /tmp/sicav-restore
+tar -xzf sicav-backup-<timestamp>.tar.gz -C /tmp/sicav-restore
+(cd /tmp/sicav-restore && sha256sum -c SHA256SUMS)
 
-# 3. Restaure as fotos para o drive dedicado
-sudo rsync -a backup-fotos/ /mnt/visitantes/fotos/
+# 2. Descripto (pule se o backup foi feito com --no-encrypt)
+gpg --decrypt /tmp/sicav-restore/db.sql.gpg > /tmp/sicav-restore/db.sql
+gpg --decrypt /tmp/sicav-restore/fotos.tar.gz.gpg > /tmp/sicav-restore/fotos.tar.gz
+
+# 3. Suba a stack — o migrate cria o schema vazio
+./scripts/deploy.sh
+
+# 4. Restaure o dump por cima (senha via MYSQL_PWD, fora de argv)
+docker compose exec -T -e MYSQL_PWD="$MYSQL_ROOT_PASSWORD" db \
+  mysql -u root "$VISITORPASS_DB_NAME" < /tmp/sicav-restore/db.sql
+
+# 5. Restaure as fotos para o drive dedicado (confira o destino antes!)
+sudo rm -rf /mnt/visitantes/fotos/*
+sudo tar -xzf /tmp/sicav-restore/fotos.tar.gz -C /mnt/visitantes/fotos
+sudo chown -R 1000:1000 /mnt/visitantes/fotos
 ```
+
+> Antes do go-live, **execute esse restore em um host de teste** e registre o
+> RTO/RPO obtidos. Um backup sem restore validado não é backup.
 
 ### Atualização da stack
 
@@ -361,8 +404,8 @@ cd /opt/sistema-visitantes
 git switch main
 git pull --ff-only origin main
 
-# 3. Rebuild e recrie os containers
-docker compose up -d --build
+# 3. Rebuild e recrie os containers (com preflight + espera dos healthchecks)
+./scripts/deploy.sh
 
 # 4. Migrações novas (se houver) rodam automaticamente no boot do app —
 #    docker/migrate.php é idempotente e pode rodar várias vezes com segurança
