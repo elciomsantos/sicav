@@ -38,6 +38,7 @@ services:
       VISITORPASS_SESSION_ABSOLUTE_LIFETIME: ${VISITORPASS_SESSION_ABSOLUTE_LIFETIME:-43200}
       VISITORPASS_APP_NAME: "Sistema de Visitantes"
       VISITORPASS_ENV: ${APP_ENV:-production}
+      VISITORPASS_APP_VERSION: ${VISITORPASS_APP_VERSION:-v1.0.0}
     volumes:
       # Fotos dos visitantes no drive dedicado.
       # No host: chown 1000:1000 ${FOTOS_DIR:-/mnt/visitantes/fotos}
@@ -46,6 +47,15 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # Healthcheck: o login e a pagina publica mais leve que ainda exercita
+    # Apache + PHP + sessao. Evita que um app travado continue "Up" enquanto o
+    # nginx devolve 502. curl ja esta na imagem (Dockerfile).
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1/index.php?page=login"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -87,7 +97,15 @@ services:
     volumes:
       - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      - app
+      app:
+        condition: service_healthy
+    # "wget --spider" do busybox (imagem alpine). Nao usar "/" aqui: a raiz
+    # responde 302 com Location relativa, que o busybox wget nao consegue seguir.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/index.php?page=login"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

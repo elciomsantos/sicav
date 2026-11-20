@@ -1,0 +1,21 @@
+[Unit]
+Description=SICAV - Sistema de Gerenciamento e Controle de Visitantes
+Documentation=file:/opt/sistema-visitantes/README.md
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+# O drive de dados TEM que estar montado antes do Compose criar os bind mounts.
+RequiresMountsFor=/mnt/visitantes
+AssertPathIsMountPoint=/mnt/visitantes
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/sistema-visitantes
+ExecStart=/opt/sistema-visitantes/scripts/deploy.sh
+ExecStop=/usr/bin/docker compose -f /opt/sistema-visitantes/docker-compose.yml down
+TimeoutStartSec=900
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

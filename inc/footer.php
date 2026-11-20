@@ -1,8 +1,13 @@
-<footer class="footer mt-auto py-3 bg-light">
-    <div class="container text-center">
-        <span class="text-muted">
-            Sistema de Gerenciamento de Visitantes &copy; <?php echo date('Y'); ?> -
+<footer class="footer mt-auto py-2">
+    <div class="container d-flex flex-wrap align-items-center justify-content-center gap-2">
+        <img src="<?= htmlspecialchars($GLOBALS['APP_BASE_PATH'] ?? '', ENT_QUOTES, 'UTF-8') ?>/imagens/Logo_sicav.png"
+            alt="Sistema de Gerenciamento e Controle de Visitantes" class="footer-logo">
+        <span class="text-muted small">
+            Sistema de Gerenciamento e Controle de Visitantes &copy; <?php echo date('Y'); ?> -
             <span class="developer-name">Beta +</span>
+            <span class="badge bg-secondary ms-1" title="Versão do sistema">
+                <?= htmlspecialchars(defined('APP_VERSION') ? APP_VERSION : 'v1.0.0', ENT_QUOTES, 'UTF-8') ?>
+            </span>
         </span>
     </div>
 </footer>
