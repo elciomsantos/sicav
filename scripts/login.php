@@ -51,11 +51,12 @@ body {
     padding: 0;
 }
 
-/* Layout principal centralizado */
+/* Layout principal: cartao centralizado no espaco util, rodape la na base */
 body {
     display: flex;
-    justify-content: center;
+    flex-direction: column;
     align-items: center;
+    min-height: 100vh;
 
     background: #1a2a4a url('<?= htmlspecialchars($GLOBALS['APP_BASE_PATH'] ?? '', ENT_QUOTES, 'UTF-8') ?>/imagens/tela_fundo.png');
 
@@ -72,8 +73,12 @@ body {
         inset 0 0 0 6px rgba(255, 255, 255, 0.08);
 }
 
-/* Wrapper evita conflito com Bootstrap */
+/* Wrapper ocupa o espaco entre o topo e o rodape e centraliza o cartao */
 .login-wrapper {
+    flex: 1 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     width: 100%;
     max-width: 420px;
     padding: 20px;
@@ -85,24 +90,38 @@ body {
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
 
-    border-radius: 16px;
+    border-radius: 4px;
     border: 1px solid rgba(255, 255, 255, 0.5);
 
     box-shadow: 0 15px 35px rgba(0, 0, 0, 0.35);
     color: #000;
 }
 
-/* Título institucional */
-.card h3 {
-    font-weight: 600;
-    text-align: center;
-    letter-spacing: 1px;
+/* Logo institucional no formulario de login */
+.login-logo {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    max-height: 130px;
+    margin: 0 auto 0.5rem;
+    object-fit: contain;
+}
+
+/* Rodape transparente, rente a base da tela */
+body > .footer {
+    width: 100%;
+    flex-shrink: 0;
+}
+
+body > .footer .text-muted,
+body > .footer .developer-name {
+    color: rgba(255, 255, 255, 0.9) !important;
 }
 
 /* Inputs refinados */
 .form-control {
     background: rgba(255, 255, 255, 0.85);
-    border-radius: 8px;
+    border-radius: 4px;
     border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
@@ -110,6 +129,7 @@ body {
 .btn-secondary {
     background-color: #1f3c60;
     border: none;
+    border-radius: 4px;
     font-weight: 500;
 }
 
@@ -119,7 +139,9 @@ body {
 </style>
 <div class="login-wrapper">
     <div class="card p-5">
-        <h3>ACESSO AO SISTEMA</h3>
+        <h1 class="visually-hidden">Sistema de Gerenciamento e Controle de Visitantes</h1>
+        <img src="<?= htmlspecialchars($GLOBALS['APP_BASE_PATH'] ?? '', ENT_QUOTES, 'UTF-8') ?>/imagens/Logo_sicav.png"
+            alt="Sistema de Gerenciamento e Controle de Visitantes" class="login-logo">
         <hr class="bg-light">
         <form action="?page=login_submit" method="post">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(getCsrfToken(), ENT_QUOTES, 'UTF-8') ?>">
@@ -134,6 +156,9 @@ body {
             <div class="form-group">
                 <input type="submit" value="Entrar" class="btn btn-secondary w-100 mt-2">
             </div>
+            <p class="text-center text-muted small mt-3 mb-0">
+                Esqueceu a senha? Contate o administrador.
+            </p>
         </form>
         <!-- ERRO DE LOGIN -->
         <?php if (!empty($erro)) : ?>

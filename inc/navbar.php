@@ -5,9 +5,9 @@ $current_page = $_GET['page'] ?? 'home';
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
     <div class="container">
         <!-- Brand/Logo -->
-        <a class="navbar-brand fw-bold" href="?page=home">
-            <i class="fas fa-id-card-alt me-2"></i>
-            Controle de Visitantes
+        <a class="navbar-brand d-flex align-items-center" href="?page=home">
+            <img src="<?= htmlspecialchars($GLOBALS['APP_BASE_PATH'] ?? '', ENT_QUOTES, 'UTF-8') ?>/imagens/Logo_sicav.png"
+                alt="Sistema de Gerenciamento e Controle de Visitantes" class="navbar-logo">
         </a>
 
         <!-- Mobile Toggle -->

@@ -29,6 +29,26 @@ body {
   font-weight: 600;
 }
 
+.navbar-brand .navbar-logo {
+  height: 56px;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+/* Home: fundo claro para dar contraste a imagem institucional escura */
+body.page-home {
+  background: #eef3f8;
+}
+
+/* Imagem institucional abaixo dos cards da home */
+.home-corporativo {
+  max-width: 100%;
+  max-height: 420px;
+  height: auto;
+  object-fit: contain;
+}
+
 /* ====== CARDS ====== */
 .card {
   border: none;

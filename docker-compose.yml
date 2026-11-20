@@ -38,6 +38,7 @@ services:
       VISITORPASS_SESSION_ABSOLUTE_LIFETIME: ${VISITORPASS_SESSION_ABSOLUTE_LIFETIME:-43200}
       VISITORPASS_APP_NAME: "Sistema de Visitantes"
       VISITORPASS_ENV: ${APP_ENV:-production}
+      VISITORPASS_APP_VERSION: ${VISITORPASS_APP_VERSION:-v1.0.0}
     volumes:
       # Fotos dos visitantes no drive dedicado.
       # No host: chown 1000:1000 ${FOTOS_DIR:-/mnt/visitantes/fotos}

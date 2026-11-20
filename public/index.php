@@ -276,9 +276,12 @@ foreach ($apiRoutes as $apiRoute) {
 }
 
 // Body class para background
-$bodyBgZoom = ['home', 'listar_visitantes'];
+$bodyBgZoom = ['listar_visitantes'];
 $bodyBgShadow = ['cadastro_visitantes', 'listarUsuario', 'editarUsuario'];
-if (in_array($page, $bodyBgZoom, true)) {
+if ($page === 'home') {
+    // Fundo claro: a imagem institucional e escura e precisa de contraste.
+    $GLOBALS['body_class'] = 'page-home';
+} elseif (in_array($page, $bodyBgZoom, true)) {
     $GLOBALS['body_class'] = 'page-bg';
 } elseif (in_array($page, $bodyBgShadow, true)) {
     $GLOBALS['body_class'] = 'page-bg--shadow';

@@ -41,3 +41,9 @@ if (!defined('DB_PASS')) {
 if (!defined('GLOBAL_IP_SCOPE')) {
     define('GLOBAL_IP_SCOPE', '__IP_GLOBAL__');
 }
+
+if (!defined('APP_VERSION')) {
+    // Versao exibida no rodape. Pode ser definida via VISITORPASS_APP_VERSION
+    // (compose/.env) para acompanhar a tag de release sem editar codigo.
+    define('APP_VERSION', appEnv('VISITORPASS_APP_VERSION', 'v1.0.0'));
+}
