@@ -82,8 +82,9 @@ else
     fi
 
     NGINX_PORT="${NGINX_PORT:-8000}"
-    [[ "$NGINX_PORT" =~ ^[0-9]+$ ]] && (( NGINX_PORT >= 1 && NGINX_PORT <= 65535 )) || \
+    if [[ ! "$NGINX_PORT" =~ ^[0-9]+$ ]] || (( NGINX_PORT < 1 || NGINX_PORT > 65535 )); then
         fail "NGINX_PORT invalida: '$NGINX_PORT'."
+    fi
 fi
 
 # ---------------------------------------------------------------------------

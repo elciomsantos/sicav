@@ -45,7 +45,8 @@ jobs:
           sudo apt-get install -y shellcheck
 
       - name: ShellCheck
-        run: shellcheck scripts/*.sh docker/*.sh
+        # -x segue o source= apontando para scripts/lib/env-loader.sh
+        run: shellcheck -x scripts/*.sh scripts/lib/*.sh docker/*.sh
 
       - name: Hadolint
         uses: hadolint/hadolint-action@v3.5.0
