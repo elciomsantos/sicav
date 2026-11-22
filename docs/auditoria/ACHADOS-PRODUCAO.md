@@ -3,6 +3,7 @@
 - **Data:** 2026-11-14
 - **Commit analisado:** `18e6d1d` (`fix/dev-development`)
 - **Alvo:** Ubuntu Server + Docker Engine + Docker Compose
+- **Índice:** [docs/README.md](../README.md)
 - **Documento completo:** [ANALISE-PRONTO-PRODUCAO.md](ANALISE-PRONTO-PRODUCAO.md)
 - **Legenda de severidade:** P0 = bloqueador de go-live · P1 = alto, corrigir na primeira semana · P2 = melhoria contínua
 - **Status inicial de todos os itens:** Aberto
@@ -24,10 +25,10 @@
 |---|---|---|---|---|---|---|
 | P0-01 | Deploy/Git | `main` não contém o hardening mais recente e contém artefatos de desenvolvimento | `git merge-base --is-ancestor 18e6d1d main` → 1; `main` em `21b339a` com `phpactor.phar` (4,8 MB), `phpactor-lsp` e `phpactor/phpactor` em `composer.json` sem atualizar `composer.lock` | Deploy pela `main` publica versão sem as correções de IP real, `X-Request-ID`, digests e credenciais obrigatórias; CI/`composer validate` pode falhar | Abrir PR `fix/dev-development` → `main`, remover binários/wrapper do phpactor, corrigir o lock, rodar CI e só então taguear | Aberto |
 | P0-02 | Configuração | `.env.example.docker` define `APP_ENV=development` | `.env.example.docker:10`; `docker-compose.yml:40`; `docker/migrate.php:220-231`; `Dockerfile:46-65` | Deploy seguindo o exemplo sobe imagem de dev e cria usuário `supervisor` com senha pública | Trocar o default para `production` ou criar `.env.production.example`; preflight que recusa `APP_ENV != production` | Aberto |
-| P0-03 | Autenticação | Credenciais iniciais conhecidas e fallback de senha fraca | `docker/migrate.php:223` (`Admin@2026Temp!`); `README.md:245-247`; fallback `visitorpassword` em `docker/entrypoint.sh:28` e `docker/migrate.php:11` | Quem fizer o primeiro login antes do responsável assume o admin com credencial pública | Exigir `VISITORPASS_ADMIN_INITIAL_PASSWORD` ou gerar senha aleatória exibida uma única vez; remover fallbacks; criar admin antes de liberar a porta | Aberto |
-| P0-04 | Rede/TLS | Produção sem HTTPS; nginx apenas em `:80` publicado em todas as interfaces | `deploy/nginx/default.conf`; `docker-compose.yml:80-81`; `docs/ESPECIFICAÇÃO-SEGURANÇA.md` §21 | Credenciais e cookies trafegam em claro; requisito normativo não atendido para acesso externo | Para rede isolada: decisão formal de risco + firewall restrito. Para acesso externo: proxy TLS, publicar nginx só em loopback, redirecionar HTTP→HTTPS e configurar `real_ip` no nginx do Compose | Aberto |
-| P0-05 | Backup/DR | Backup e restauração manuais, sem automação, criptografia, retenção ou restore testado | `README.md:279-316`; não existe `scripts/backup.sh`; banco e fotos no mesmo drive `/mnt/visitantes` | Perda do drive ou erro humano pode causar perda definitiva de dados; PII sem criptografia no backup | Criar script com `flock` + `mysqldump --single-transaction --routines --triggers --events`, cópia de fotos, checksum, criptografia, envio offsite, retenção e timer systemd; executar restore de teste | Aberto |
-| P0-06 | Armazenamento | Se `/mnt/visitantes` não estiver montado, o Docker cria a pasta no disco do sistema | `docker-compose.yml:44,117`; aviso apenas textual em `README.md:182-184` | Dados do banco/fotos passam a residir no disco errado, com risco de perda e falta de espaço | Guarda no deploy (`findmnt -M /mnt/visitantes`), unit systemd com `RequiresMountsFor`/`ConditionPathIsMountPoint` e alerta de disco | Aberto |
+| P0-03 | Autenticação | Credenciais iniciais conhecidas e fallback de senha fraca | `docker/migrate.php:223` (`Admin@2026Temp!`); `README.md`, seção "Primeiro acesso"; fallback `visitorpassword` em `docker/entrypoint.sh:28` e `docker/migrate.php:11` | Quem fizer o primeiro login antes do responsável assume o admin com credencial pública | Exigir `VISITORPASS_ADMIN_INITIAL_PASSWORD` ou gerar senha aleatória exibida uma única vez; remover fallbacks; criar admin antes de liberar a porta | Aberto |
+| P0-04 | Rede/TLS | Produção sem HTTPS; nginx apenas em `:80` publicado em todas as interfaces | `deploy/nginx/default.conf`; `docker-compose.yml:80-81`; `docs/seguranca/ESPECIFICACAO-SEGURANCA.md` §21 | Credenciais e cookies trafegam em claro; requisito normativo não atendido para acesso externo | Para rede isolada: decisão formal de risco + firewall restrito. Para acesso externo: proxy TLS, publicar nginx só em loopback, redirecionar HTTP→HTTPS e configurar `real_ip` no nginx do Compose | Aberto |
+| P0-05 | Backup/DR | Backup e restauração manuais, sem automação, criptografia, retenção ou restore testado | `README.md`, seção "Backup e restauração"; não existe `scripts/backup.sh`; banco e fotos no mesmo drive `/mnt/visitantes` | Perda do drive ou erro humano pode causar perda definitiva de dados; PII sem criptografia no backup | Criar script com `flock` + `mysqldump --single-transaction --routines --triggers --events`, cópia de fotos, checksum, criptografia, envio offsite, retenção e timer systemd; executar restore de teste | Aberto |
+| P0-06 | Armazenamento | Se `/mnt/visitantes` não estiver montado, o Docker cria a pasta no disco do sistema | `docker-compose.yml:44,117`; aviso apenas textual em `README.md`, seção "Produção (Ubuntu Server 26.04 LTS)" | Dados do banco/fotos passam a residir no disco errado, com risco de perda e falta de espaço | Guarda no deploy (`findmnt -M /mnt/visitantes`), unit systemd com `RequiresMountsFor`/`ConditionPathIsMountPoint` e alerta de disco | Aberto |
 
 ---
 
@@ -58,7 +59,7 @@
 | P2-03 | Performance | OPcache habilitado, mas sem tuning | `docker/php.ini`; imagem base com `opcache.enable=On` | Menor desempenho de PHP em produção | `opcache.validate_timestamps=0`, memória 128 MB, `interned_strings_buffer=16`, `max_accelerated_files=10000`; reiniciar no deploy | Aberto |
 | P2-04 | Performance | Sem compressão no nginx e imagens estáticas pesadas | `deploy/nginx/default.conf`; `public/imagens` ~4,3 MB (`avatar.png` 2,1 MB, `logo_sts.png` 1,3 MB, `tela_fundo.png` 0,95 MB) | Primeiro carregamento mais lento | Habilitar gzip para texto/JSON/JS/CSS/SVG; converter/redimensionar imagens para WebP | Aberto |
 | P2-05 | Banco | MySQL sem tuning explícito | `docker-compose.yml:104-133` | Uso de memória/desempenho subótimo conforme o volume cresce | Avaliar `innodb_buffer_pool_size`, `max_connections` e `slow_query_log` com base no uso real | Aberto |
-| P2-06 | Autenticação | MFA foi removido do produto | `README.md:496-508`; `docs/PLANO_IMPLEMENTACAO.md` | Contas admin protegidas apenas por senha | Reavaliar MFA ou integrar SSO/2FA no proxy corporativo; registrar decisão de risco | Aberto |
+| P2-06 | Autenticação | MFA foi removido do produto | `README.md`, seção "Histórico de segurança"; `docs/seguranca/PLANO_IMPLEMENTACAO.md` | Contas admin protegidas apenas por senha | Reavaliar MFA ou integrar SSO/2FA no proxy corporativo; registrar decisão de risco | Aberto |
 | P2-07 | Contas | Risco de uso compartilhado do usuário `admin` padrão | `docker/migrate.php:217-236` | Falta de rastreabilidade individual e maior impacto em caso de vazamento | Criar uma conta por administrador e desativar o admin padrão após o bootstrap | Aberto |
 | P2-08 | Borda | Sem WAF/rate limiting no proxy | `deploy/nginx/default.conf` | Ataques volumétricos e scanners chegam direto à aplicação | CrowdSec/ModSecurity no proxy TLS, se houver exposição externa | Aberto |
 | P2-09 | Disponibilidade | Atualização recria o container e causa janela curta de indisponibilidade | Processo `docker compose up -d --build` | Downtime em cada deploy | Documentar janela de manutenção; para HA, réplica + load balancer + sessão compartilhada | Aberto |
@@ -108,6 +109,25 @@ imagem oficial fixada. A CVE restante do `gosu` foi adicionada à lista de
 exceções com justificativa específica: o binário de troca de usuário não
 executa servidor HTTP/1 nem chama `net/http MaxBytesReader`. O job Trivy verifica
 essa mesma imagem derivada usada pelo Compose.
+
+### Vulnerabilidades críticas no HTTP/2 do nginx (2026-11-21)
+
+Aviso F5/CERT-EU 2026-022 (18/11): **CVE-2026-123007** — underflow de flow-control
+do HTTP/2, escrita fora do heap e RCE no worker (CVSS 4.0 9.2) — e
+**CVE-2026-123633** — use-after-free ao drenar conexão HTTP/2 com upstream
+(CVSS 8.1). Atingem nginx 1.9.5–1.30.6 (stable) e 1.31.0–1.31.8 (mainline);
+corrigidas em **1.30.7 / 1.31.9**.
+
+**Status: não exposto.** O digest em `docker/nginx.Dockerfile:8` resolve para
+`nginx:1.30.7-alpine` (confirmado com `docker buildx imagetools inspect`), e a
+config nunca habilitou HTTP/2 (`listen 80;`, `proxy_http_version 1.1`). Agora o
+`server` também declara `http2 off;` explicitamente, conforme a mitigação do
+fornecedor. As demais CVEs do aviso (QUIC/HTTP/3, `resolver`+`mirror` e
+`auth_http` de mail) não têm pré-requisito presente nesta configuração.
+
+**Ação de deploy:** confirmar que o container em produção foi reconstruído com o
+digest 1.30.7 (`docker compose -f docker-compose.yml images nginx`). Se entrar um
+proxy TLS à frente (P0-04), ele passa a terminar o HTTP/2 e deve estar corrigido.
 
 ---
 

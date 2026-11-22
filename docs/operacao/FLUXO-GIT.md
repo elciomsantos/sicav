@@ -1,5 +1,7 @@
 # Fluxo de branches, PRs e releases
 
+> [Índice da documentação](../README.md) · [README do repositório](../../README.md)
+
 Este documento define o fluxo oficial do repositório. O objetivo é manter
 `main` sempre pronta para produção, concentrar as mudanças em uma única branch
 de integração e registrar cada versão publicada com uma tag.
@@ -73,8 +75,8 @@ cd /opt/sistema-visitantes
 git switch main
 git pull --ff-only origin main
 
-# 3. Rebuild e suba a stack
-docker compose up -d --build
+# 3. Rebuild e suba a stack (preflight + healthchecks)
+./scripts/deploy.sh
 
 # 4. Verifique a aplicação
 docker compose ps

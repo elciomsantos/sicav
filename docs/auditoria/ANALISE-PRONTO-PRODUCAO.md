@@ -3,11 +3,12 @@
 - **Data:** 2026-11-14
 - **Commit analisado:** `18e6d1d` (`fix/dev-development`)
 - **Alvo:** Ubuntu Server + Docker Engine + Docker Compose
+- **Índice:** [docs/README.md](../README.md)
 - **Escopo:** aplicação PHP, banco MySQL, imagens/Compose, deploy, operação e continuidade
 - **Método:** leitura do código e da infraestrutura, validação de `docker compose config`,
   `docker build --check` e build real da imagem de produção, inspeção da imagem gerada
-  e comparação entre a documentação (`README.md`, `docs/PLANO_IMPLEMENTACAO.md`,
-  `docs/ESPECIFICAÇÃO-SEGURANÇA.md`) e o estado do repositório.
+  e comparação entre a documentação (`README.md`, `docs/seguranca/PLANO_IMPLEMENTACAO.md`,
+  `docs/seguranca/ESPECIFICACAO-SEGURANCA.md`) e o estado do repositório.
 
 ---
 
@@ -126,7 +127,7 @@ um usuário adicional com senha conhecida — falha de segurança direta.
 **Evidência**
 
 - `docker/migrate.php:223`: `password_hash('Admin@2026Temp!', PASSWORD_ARGON2ID)`.
-- `README.md:245-247` publica as senhas iniciais (repositório público).
+- `README.md` (seção "Primeiro acesso") publica as senhas iniciais (repositório público).
 - `docker/entrypoint.sh:28` e `docker/migrate.php:11` usam fallback `visitorpassword`.
 - O usuário nasce com `senha_temporaria=1`, mas **quem fizer o primeiro login primeiro
   define a senha definitiva**.
@@ -154,7 +155,7 @@ credencial pública. Em `development`, o supervisor também é criado com senha 
 
 - `deploy/nginx/default.conf` escuta apenas `:80`; o Compose publica
   `${NGINX_PORT:-8000}:80` em todas as interfaces.
-- `docs/ESPECIFICAÇÃO-SEGURANÇA.md` §21 exige HTTPS em produção; o próprio documento
+- `docs/seguranca/ESPECIFICACAO-SEGURANCA.md` §21 exige HTTPS em produção; o próprio documento
   registra o requisito como pendente para exposição externa.
 - Cookies só recebem `Secure`/`__Host-SID` quando `isHttpsRequest()` detecta HTTPS.
 
@@ -192,7 +193,7 @@ real_ip_recursive on;
 
 **Evidência**
 
-- O README tem apenas comandos manuais de `mysqldump` e `rsync` (`README.md:279-316`).
+- O README tem apenas comandos manuais de `mysqldump` e `rsync` (`README.md`, seção "Backup e restauração").
 - Não existe `scripts/backup.sh`, timer/cron versionado, verificação de integridade,
   criptografia, retenção ou teste de restore.
 - Banco e fotos ficam no **mesmo drive** `/mnt/visitantes`; a perda do drive perde os dois.
@@ -567,7 +568,7 @@ fix/dev-development = 18e6d1d (hardening de 2026-11-13)
 ## 9. Observações finais
 
 - A aplicação em si **não apresentou falha crítica** de SQLi/XSS/CSRF/path traversal na
-  revisão; os controles descritos no `PLANO_IMPLEMENTACAO.md` estão implementados.
+  revisão; os controles descritos no [`PLANO_IMPLEMENTACAO.md`](../seguranca/PLANO_IMPLEMENTACAO.md) estão implementados.
 - O maior risco atual é **operacional**: publicar a branch errada, subir com o exemplo de
   desenvolvimento, expor HTTP sem decisão formal, ou perder dados por ausência de backup
   testado/mount não verificado.
