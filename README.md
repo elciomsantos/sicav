@@ -2,40 +2,18 @@
   <img src="/public/imagens/corporativo.png" alt="Logo" width="400">
 
   <h1>Sistema de Gerenciamento e Controle de Visitantes</h1>
-
-  <p align="center">
-
- 
-
-  </p>
 </div>
-
-# Sistema de Visitantes (SICAV)
-
-# SICAV
-**Sistema de Gerenciamento e Controle de Visitantes**
 
 O SICAV é um sistema desenvolvido para modernizar, organizar e aumentar a segurança no processo de gerenciamento e controle de visitantes em instituições, empresas e órgãos públicos.
 
-A plataforma permite realizar o cadastro e a identificação de visitantes, registrar entradas e saídas, controlar o fluxo de pessoas e manter um histórico detalhado das visitas realizadas.
+A plataforma permite realizar o cadastro e a identificação de visitantes, registrar entradas e saídas, controlar o fluxo de pessoas e manter um histórico detalhado das visitas realizadas. Com uma interface intuitiva e recursos voltados à segurança da informação, o SICAV proporciona maior eficiência administrativa, rastreabilidade e confiabilidade no controle de acesso às dependências institucionais.
 
-Com uma interface intuitiva e recursos voltados à segurança da informação, o SICAV proporciona maior eficiência administrativa, rastreabilidade e confiabilidade no controle de acesso às dependências institucionais.
-
-**Principais funcionalidades:**
-- Cadastro e identificação de visitantes.
-- Registro de entrada e saída.
-- Controle e acompanhamento de acessos.
-- Consulta ao histórico de visitas.
-- Emissão de relatórios gerenciais.
-- Armazenamento organizado das informações.
-- Maior controle e rastreabilidade das movimentações.
+Sistema web para controle de entrada e saída de visitantes com geração de
+crachás, relatórios e auditoria.
 
 **Objetivo:** proporcionar um ambiente mais seguro, organizado e eficiente por meio da gestão informatizada de visitantes.
 
 **Slogan:** Segurança, organização e controle de acesso.
-
-Sistema web para controle de entrada e saída de visitantes com geração de
-crachás, relatórios e auditoria.
 
 ## Sumário
 
@@ -53,21 +31,28 @@ crachás, relatórios e auditoria.
 - [Variáveis de ambiente](#variáveis-de-ambiente)
 - [Qualidade e CI](#qualidade-e-ci)
 - [Histórico de segurança](#histórico-de-segurança)
+- [Documentação](#documentação)
 - [Estrutura do projeto](#estrutura-do-projeto)
 - [Licença](#licença)
 
 ## Funcionalidades
 
-- Cadastro de visitantes com foto via webcam
-- Geração de crachá personalizado (impressão)
-- Controle de entrada/saída com registro de data/hora
-- Relatórios por período com filtros e exportação em Excel, CSV e PDF
+### Gestão de visitantes
+
+- Cadastro e identificação de visitantes, com foto via webcam e geração de crachá personalizado para impressão
+- Registro de entrada e saída com data/hora
+- Controle e acompanhamento de acessos, com consulta ao histórico de visitas
+- Relatórios gerenciais por período, com filtros e exportação em Excel, CSV e PDF
 - Auditoria de cadastros, edições e exclusões de visitantes, com exportação em CSV e JSON
+- Armazenamento organizado das informações e rastreabilidade das movimentações
+
+### Segurança e administração
+
 - Níveis de acesso: admin, supervisor e user
+- Administração de usuários, auditoria e desbloqueio de logins
 - Sessão única por usuário, com timeout por inatividade e expiração absoluta
 - Bloqueio automático após tentativas de login inválidas e rate limiting por rota
 - Proteção CSRF, sanitização XSS, CSP com nonce e HSTS em HTTPS
-- Administração de usuários, auditoria e desbloqueio de logins
 
 ## Arquitetura da stack Docker
 
@@ -416,7 +401,7 @@ git pull --ff-only origin main
 
 Os dados no drive dedicado (`/mnt/visitantes`) não são tocados pelo rebuild.
 O deploy é feito **somente a partir da `main`**. O fluxo completo de branches,
-PRs e versionamento está em [docs/FLUXO-GIT.md](docs/FLUXO-GIT.md).
+PRs e versionamento está em [docs/operacao/FLUXO-GIT.md](docs/operacao/FLUXO-GIT.md).
 
 ### Solução de problemas
 
@@ -456,7 +441,7 @@ verificação, execute na `main`:
 ```
 
 O workflow `release.yml` cria a release no GitHub para cada tag `v*.*.*`.
-Detalhes e comandos de PR estão em [docs/FLUXO-GIT.md](docs/FLUXO-GIT.md).
+Detalhes e comandos de PR estão em [docs/operacao/FLUXO-GIT.md](docs/operacao/FLUXO-GIT.md).
 
 ## Instalação local (sem Docker)
 
@@ -593,7 +578,7 @@ filtros do relatório de visitas; a saída passou a ser escapada no servidor.
 ### Endurecimento de proxy, imagens e credenciais (2026-11-13)
 
 Cinco pendências de infraestrutura documentadas em
-[docs/PLANO_IMPLEMENTACAO.md](docs/PLANO_IMPLEMENTACAO.md) foram fechadas:
+[docs/seguranca/PLANO_IMPLEMENTACAO.md](docs/seguranca/PLANO_IMPLEMENTACAO.md) foram fechadas:
 
 - **IP real do cliente atrás do nginx:** `mod_remoteip` habilitado no
   `Dockerfile`, com `RemoteIPHeader X-Forwarded-For` e
@@ -619,6 +604,16 @@ Cinco pendências de infraestrutura documentadas em
   `request_id` e a igualdade do IP entre o que o nginx vê e o que o PHP
   registra.
 
+## Documentação
+
+A documentação detalhada está indexada em [docs/README.md](docs/README.md):
+
+- [Análise de prontidão para produção](docs/auditoria/ANALISE-PRONTO-PRODUCAO.md) e
+  [registro de achados](docs/auditoria/ACHADOS-PRODUCAO.md)
+- [Especificação de segurança](docs/seguranca/ESPECIFICACAO-SEGURANCA.md) e
+  [plano de implementação](docs/seguranca/PLANO_IMPLEMENTACAO.md)
+- [Fluxo de branches, PRs e releases](docs/operacao/FLUXO-GIT.md)
+
 ## Estrutura do projeto
 
 ```
@@ -628,7 +623,11 @@ sicav/
 ├── config/           # Configurações do app, banco e permissões
 ├── deploy/           # Configs de infraestrutura (nginx container)
 ├── docker/           # Entrypoint, Apache/PHP ini e migrações do container
-├── docs/             # Especificações, plano de implementação e fluxo Git
+├── docs/             # Documentação (índice, auditoria, segurança e operação)
+│   ├── README.md     # Índice da documentação
+│   ├── auditoria/    # Prontidão, achados e protocolo de auditoria
+│   ├── seguranca/    # Especificação e plano de implementação
+│   └── operacao/     # Fluxo de Git, PRs e releases
 ├── fotos_visitantes/ # Fotos dos visitantes (bind mount do drive dedicado em produção)
 ├── inc/              # Helpers, segurança, sessão, rate limit e includes
 ├── public/           # DocumentRoot (index.php, assets e imagens)

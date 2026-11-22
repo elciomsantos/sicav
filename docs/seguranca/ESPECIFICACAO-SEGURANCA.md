@@ -1,4 +1,6 @@
 # ESPECIFICAÇÃO TÉCNICA DE SEGURANÇA
+
+> [Índice da documentação](../README.md)
 ## Aplicação PHP + MySQL + Docker Compose + JavaScript/HTML
 
 **Versão:** 1.0  
@@ -8,7 +10,7 @@
 
 > **Nota de aplicação — SICAV (revisão de 2026-11-13):** este documento é o
 > padrão normativo usado pelo Sistema de Visitantes (SICAV). O estado atual do
-> sistema está descrito no [README](../README.md) e no
+> sistema está descrito no [README](../../README.md) e no
 > [PLANO_IMPLEMENTACAO.md](PLANO_IMPLEMENTACAO.md): PHP 8.5 na imagem Docker
 > (compatibilidade declarada com PHP 8.4+), MySQL 8.4, Apache e Docker Compose.
 > O MFA/TOTP previsto na §12 foi removido do produto em 2026-08-20 e permanece

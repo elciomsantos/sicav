@@ -1,8 +1,10 @@
 # Especificação Final — Auditoria Completa de Projeto PHP
 
+> [Índice da documentação](../README.md)
+
 > **Nota de aplicação — SICAV (revisão de 2026-11-13):** este é o protocolo de
 > auditoria usado pelo Sistema de Visitantes (SICAV). O baseline atual está
-> registrado em [PLANO_IMPLEMENTACAO.md](PLANO_IMPLEMENTACAO.md): PHP 8.5 na
+> registrado em [PLANO_IMPLEMENTACAO.md](../seguranca/PLANO_IMPLEMENTACAO.md): PHP 8.5 na
 > imagem Docker (compatibilidade declarada com PHP 8.4+), MySQL 8.4, Apache,
 > Docker Compose, PHPUnit 13, PHPStan 2 (nível 5), Psalm 7 e Composer 2. Ao
 > auditar o SICAV, preencha a matriz da §6 com esses valores e considere que o

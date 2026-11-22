@@ -1,6 +1,8 @@
 # PLANO DE IMPLEMENTAÇÃO
 
-## Alinhado à ESPECIFICAÇÃO-SEGURANÇA.md e ao protocolo ESPECIFICACAO-AUDITORIA-PHP.md
+> [Índice da documentação](../README.md)
+
+## Alinhado à ESPECIFICACAO-SEGURANCA.md e ao protocolo ESPECIFICACAO-AUDITORIA-PHP.md
 
 - **Data original:** 2026-08-19
 - **Última revisão:** 2026-11-13
@@ -9,7 +11,7 @@
 
 > **Revisão de 2026-11-13:** o MFA/TOTP foi removido do sistema em 2026-08-20
 > e não faz parte do estado atual. O fluxo oficial de branches, PRs, deploy e
-> tags está em [`docs/FLUXO-GIT.md`](FLUXO-GIT.md).
+> tags está em [`docs/operacao/FLUXO-GIT.md`](../operacao/FLUXO-GIT.md).
 
 ---
 
